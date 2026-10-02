@@ -7,3 +7,4 @@ runs/*.sqlite
 runs/*/raw/
 *.pdf
 .env
+site-fixture/

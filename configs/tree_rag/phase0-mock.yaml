@@ -1,0 +1,13 @@
+# Pipeline smoke run: oracle arm, mock models, fixture data. No GPU, no network.
+seed: 17
+gold: tests/tree_rag/fixtures/gold_fixture.jsonl
+parsed_dir: tests/tree_rag/fixtures/parsed
+checkpoint: runs/phase0-mock.sqlite
+splits: [dev, test]
+arms: [oracle]
+navigators: [mock]
+answerers: [mock]
+judge: mock
+models:
+  mock: {kind: mock}
+prices: {}
