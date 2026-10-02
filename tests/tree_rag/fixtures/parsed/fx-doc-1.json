@@ -1,0 +1,15 @@
+{
+  "doc_id": "fx-doc-1",
+  "title": "Example Co. Barrier Reverse Convertible (synthetic fixture)",
+  "sha256": "sha256:fixture",
+  "pages": [
+    {"number": 1, "text": "Product Terms\nIssuer: Example Co. (synthetic)\nUnderlying: Example Index"},
+    {"number": 2, "text": "Barrier\nThe barrier level is 60% of the initial fixing level."},
+    {"number": 3, "text": "Coupon\nCoupon payment dates: 15.06.2026; 15.12.2026"}
+  ],
+  "tree": [
+    {"id": "n1", "parent": null, "title": "Product Terms", "start_page": 1, "end_page": 2, "level": 1},
+    {"id": "n2", "parent": null, "title": "Barrier", "start_page": 2, "end_page": 3, "level": 1},
+    {"id": "n3", "parent": null, "title": "Coupon", "start_page": 3, "end_page": 3, "level": 1}
+  ]
+}
