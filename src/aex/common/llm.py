@@ -41,6 +41,7 @@ class OpenAICompatClient:
                  retries: int = 3, backoff_s: float = 1.0, timeout_s: float = 300.0,
                  transport: httpx.BaseTransport | None = None, extra_body: dict | None = None) -> None:
         self.model = model
+        self.base_url = base_url.rstrip("/")
         # Server-specific request fields, e.g. {"chat_template_kwargs": {"reasoning_effort": "medium"}}.
         self.extra_body = dict(extra_body or {})
         self.local = local

@@ -1,0 +1,175 @@
+import pytest
+
+import aex.experiments.tree_rag.arms.pageindex_arm as pia
+from aex.common.llm import LLMError, OpenAICompatClient
+from aex.common.scoring import GoldAnswer
+from aex.experiments.tree_rag.arms import ARMS, Store, make_arm
+from aex.experiments.tree_rag.types import Page, ParsedDoc, Question, TreeNode
+
+TREE = (TreeNode("n1", None, "Terms", 1, 3, 1), TreeNode("n2", "n1", "Barrier", 2, 3, 2),
+        TreeNode("n3", None, "Redemption", 7, 8, 1), TreeNode("n4", None, "Risks", 9, 10, 1))
+
+
+def _store():
+    doc = ParsedDoc("d1", "Doc", "sha256:d1", tuple(Page(n, f"our text of page {n}") for n in range(1, 11)), TREE)
+    other = ParsedDoc("d2", "Other", "sha256:d2", (Page(1, "other"),), ())
+    return Store([doc, other], groups={"d1": "ts", "d2": "ts"})
+
+
+def _q():
+    return Question("q1", "ts", "A", "lookup", "Shares per note after a barrier event?", ("d1",),
+                    GoldAnswer("numeric", "4"), (("d1", 7),), "test")
+
+
+class FakeClient:
+    """Stands in for PageIndexClient; its chat() drives the real page-spec parser like the agent's tool does."""
+    instances: list["FakeClient"] = []
+
+    def __init__(self, reads=(("2-3", "d1.pdf"), ("7", "d1.pdf")), fail=False, **config):
+        self.config, self.reads, self.fail = config, reads, fail
+        self.submitted, self.chats = [], []
+        FakeClient.instances.append(self)
+
+    def submit_document(self, path, metadata=None):
+        self.submitted.append((path, metadata))
+        return {"doc_id": f"pi-{metadata['aex_doc_id']}"}
+
+    def chat(self, question, doc_id=None, extra_body=None):
+        import pageindex.agent_tools as at
+        self.chats.append((question, doc_id, extra_body))
+        if self.fail:
+            raise RuntimeError("upstream exploded")
+        for pages, name in self.reads:
+            at._parse_page_spec(pages, name)
+        return "4.0 shares per note (page 7)."
+
+
+@pytest.fixture
+def pdfs(tmp_path):
+    for d in ("d1", "d2"):
+        (tmp_path / f"{d}.pdf").write_bytes(b"%PDF-1.4 " + d.encode())
+    return tmp_path
+
+
+def _arm(pdfs, tmp_path, monkeypatch, **fake):
+    FakeClient.instances = []
+    monkeypatch.setattr(pia, "_client_factory", lambda **config: FakeClient(**fake, **config))
+    nav = OpenAICompatClient("http://upstream/v1", "qwen3.8-27b",
+                             extra_body={"chat_template_kwargs": {"reasoning_effort": "medium"}})
+    return make_arm("pageindex", navigator=nav, pdf_dir=str(pdfs), storage_dir=str(tmp_path / "pi"))
+
+
+def test_registered_as_a_navigating_tree_arm():
+    assert ARMS["pageindex"].family == "tree" and ARMS["pageindex"].uses_navigator
+
+
+def test_index_submits_each_pdf_once_and_reuses_the_map(pdfs, tmp_path, monkeypatch):
+    arm = _arm(pdfs, tmp_path, monkeypatch)
+    arm.index(_store())
+    assert sorted(m["aex_doc_id"] for _, m in FakeClient.instances[-1].submitted) == ["d1", "d2"]
+    again = _arm(pdfs, tmp_path, monkeypatch)
+    again.index(_store())
+    assert FakeClient.instances[-1].submitted == []      # same sha256 -> already indexed
+
+
+def test_retrieve_returns_read_pages_in_our_parse_with_a_navigation_trace(pdfs, tmp_path, monkeypatch):
+    arm = _arm(pdfs, tmp_path, monkeypatch)
+    arm.index(_store())
+    r = arm.retrieve(_q(), _store())
+    assert [(e.doc_id, e.page, e.text) for e in r.evidence] == [
+        ("d1", 2, "our text of page 2"), ("d1", 3, "our text of page 3"), ("d1", 7, "our text of page 7")]
+    assert all(e.kind == "page" for e in r.evidence)
+    t = r.trace
+    assert [x["pages"] for x in t["reads"]] == [[2, 3], [7]]
+    assert t["doc_id"] == "d1" and t["pages"] == [["d1", 2], ["d1", 3], ["d1", 7]]
+    assert t["visited"] == ["n1", "n2", "n3"] and t["backtracks"] == ["n1", "n2"] and t["selected"] == "n3"
+    assert t["pageindex_answer"].startswith("4.0 shares")
+    question, scope, extra = FakeClient.instances[-1].chats[-1]
+    assert sorted(scope) == ["pi-d1", "pi-d2"]                     # the whole corpus, as released
+    assert extra == {"chat_template_kwargs": {"reasoning_effort": "medium"}}
+
+
+def test_no_page_read_means_no_evidence(pdfs, tmp_path, monkeypatch):
+    arm = _arm(pdfs, tmp_path, monkeypatch, reads=())
+    arm.index(_store())
+    r = arm.retrieve(_q(), _store())
+    assert r.evidence == [] and r.trace["reads"] == [] and r.trace["selected"] is None
+
+
+def test_sdk_failures_become_llm_errors_so_the_row_is_retried(pdfs, tmp_path, monkeypatch):
+    arm = _arm(pdfs, tmp_path, monkeypatch, fail=True)
+    arm.index(_store())
+    with pytest.raises(LLMError, match="exploded"):
+        arm.retrieve(_q(), _store())
+
+
+def test_missing_pdf_fails_at_index_time(pdfs, tmp_path, monkeypatch):
+    (pdfs / "d2.pdf").unlink()
+    with pytest.raises(FileNotFoundError, match="d2"):
+        _arm(pdfs, tmp_path, monkeypatch).index(_store())
+
+
+LIVE = "http://hubed-dgx:8000/v1"
+
+
+def _live_up() -> bool:
+    import httpx
+    try:
+        return httpx.get(f"{LIVE}/models", timeout=3).status_code == 200
+    except httpx.HTTPError:
+        return False
+
+
+def make_termsheet_pdf(path, *, barrier="60%", shares="4.0"):
+    """Twelve-page synthetic termsheet: six sections, each a content page plus a filler continuation page."""
+    from reportlab.lib.pagesizes import A4
+    from reportlab.pdfgen import canvas
+    sections = [("1 Product Terms", ["Issuer: Example Co. (synthetic)", "Underlying: Example Index", "Denomination: CHF 5,000"]),
+                ("2 Barrier", [f"The barrier level is {barrier} of the initial fixing level.", "Barrier observation is continuous."]),
+                ("3 Coupon", ["Coupon: 4.5% p.a., paid semi-annually.", "Coupon payment dates: 15 June 2026 and 15 December 2026."]),
+                ("4 Redemption", ["If no barrier event occurs, redemption at 100% of denomination.",
+                                  f"Otherwise physical delivery of {shares} shares per note."]),
+                ("5 Risk Factors", ["Investors may lose their entire investment.", "Liquidity may be limited."]),
+                ("6 Selling Restrictions", ["The product may not be offered in the United States."])]
+    c = canvas.Canvas(str(path), pagesize=A4)
+    for title, lines in sections:
+        for part in (1, 2):
+            c.setFont("Helvetica-Bold", 16)
+            c.drawString(72, 770, title if part == 1 else f"{title} (continued)")
+            c.setFont("Helvetica", 11)
+            for i, line in enumerate(lines if part == 1 else ["General provisions apply. " * 3]):
+                c.drawString(72, 740 - 18 * i, line)
+            c.showPage()
+    c.save()
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(not _live_up(), reason="hubed-dgx endpoint not reachable")
+def test_live_pageindex_reads_the_redemption_page(tmp_path):
+    from aex.experiments.tree_rag.parse import parse_pdf
+    pdf_dir = tmp_path / "pdfs"
+    pdf_dir.mkdir()
+    make_termsheet_pdf(pdf_dir / "ts1.pdf")
+    store = Store([parse_pdf(pdf_dir / "ts1.pdf", "ts1")])
+    nav = OpenAICompatClient(LIVE, "qwen3.8-27b", extra_body={"chat_template_kwargs": {"reasoning_effort": "medium"}})
+    arm = make_arm("pageindex", navigator=nav, pdf_dir=str(pdf_dir), storage_dir=str(tmp_path / "pi"))
+    stats = arm.index(store)
+    q = Question("live-1", "ts", "A", "lookup", "How many shares are delivered per note after a barrier event?",
+                 ("ts1",), GoldAnswer("numeric", "4"), (("ts1", 7),), "test")
+    r = arm.retrieve(q, store)
+    print("index", stats, "\ntrace", r.trace, "\nledger", r.ledger.input_tokens, r.ledger.output_tokens,
+          r.ledger.sequential_calls, round(r.ledger.latency_s, 1))
+    # Plumbing, not model quality: which pages the agent picks varies between fresh index builds (tree
+    # summaries come from concurrent calls, which vLLM does not reproduce bit for bit). On one fixed tree,
+    # repeated queries read identical pages. Whether it finds page 7 is what the experiment measures.
+    assert r.trace["reads"] and r.evidence
+    assert all(e.text == store.get("ts1").page(e.page).text for e in r.evidence)
+    assert r.ledger.sequential_calls >= 2 and r.ledger.input_tokens > 0
+    assert stats.input_tokens > 0 and stats.gpu_s
+
+
+def test_proxy_supplies_temperature_seed_and_thinking(pdfs, tmp_path, monkeypatch):
+    arm = _arm(pdfs, tmp_path, monkeypatch)
+    arm.index(_store())
+    assert arm._proxy.defaults == {"temperature": 0.0, "seed": 0,
+                                   "chat_template_kwargs": {"reasoning_effort": "medium"}}
