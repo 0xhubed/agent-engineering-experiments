@@ -144,12 +144,15 @@ class PageIndexArm:
     # ── query ──
 
     def retrieve(self, q: Question, store: Store) -> Retrieval:
-        global _active
         self._ensure_client()
-        scope = [self._ids[d] for d in store.scope(q, self.scopes.get(q.dataset, "corpus")) if d in self._ids]
+        return self._navigate(q, store, store.scope(q, self.scopes.get(q.dataset, "corpus")), Ledger())
+
+    def _navigate(self, q: Question, store: Store, doc_ids: list[str], ledger: Ledger) -> Retrieval:
+        """Run the SDK's agent over `doc_ids` (ours) and turn what it read or was shown into evidence."""
+        global _active
+        scope = [self._ids[d] for d in doc_ids if d in self._ids]
         target = scope[0] if len(scope) == 1 else scope
         extra = getattr(self.navigator, "extra_body", None) or None
-        ledger = Ledger()
         reads: list[tuple[float, str, list[int]]] = []
         started = time.perf_counter()
         self._shown = []
