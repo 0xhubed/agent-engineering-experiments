@@ -102,25 +102,33 @@ class RaptorArm:
             raise ValueError("arm 'raptor' needs an embedder (services.embedder in the run config)")
         if self.navigator is None:
             raise ValueError("arm 'raptor' needs a navigator to write summaries (navigators in the run config)")
-        ledger = Ledger()
+        llm_in, llm_out, llm_s = 0, 0, None
         embed_tokens, embed_s = 0, 0.0
         for doc_id in sorted(store.docs):
             doc = store.get(doc_id)
             cache = self._cache_file(doc)
             if cache is not None and cache.exists():
-                nodes = [RNode(**n) for n in json.loads(cache.read_text())]
+                cached = json.loads(cache.read_text())
             else:
-                nodes, tokens, seconds = self._build(doc, ledger)
-                embed_tokens, embed_s = embed_tokens + tokens, embed_s + seconds
+                doc_ledger = Ledger()
+                nodes, tokens, seconds = self._build(doc, doc_ledger)
+                cached = {"nodes": [asdict(n) for n in nodes],
+                          "cost": {"llm_input": doc_ledger.input_tokens, "llm_output": doc_ledger.output_tokens,
+                                   "llm_s": doc_ledger.gpu_s, "embed_tokens": tokens, "embed_s": seconds}}
                 if cache is not None:
                     cache.parent.mkdir(parents=True, exist_ok=True)
-                    cache.write_text(json.dumps([asdict(n) for n in nodes]))
+                    cache.write_text(json.dumps(cached))
+            # Build cost is reported on cache hits too (see ChunkIndex.build).
+            cost = cached["cost"]
+            llm_in, llm_out = llm_in + cost["llm_input"], llm_out + cost["llm_output"]
+            llm_s = llm_s if cost["llm_s"] is None else (llm_s or 0.0) + cost["llm_s"]
+            embed_tokens, embed_s = embed_tokens + cost["embed_tokens"], embed_s + cost["embed_s"]
+            nodes = [RNode(**n) for n in cached["nodes"]]
             self.nodes[doc_id] = nodes
             self._matrix[doc_id] = np.asarray([n.vector for n in nodes], dtype=np.float32)
         local_embed = embed_s if self.embedder.local and embed_tokens else None
-        gpu = None if ledger.gpu_s is None and local_embed is None else (ledger.gpu_s or 0.0) + (local_embed or 0.0)
-        return IndexStats(input_tokens=ledger.input_tokens + embed_tokens, output_tokens=ledger.output_tokens,
-                          gpu_s=gpu)
+        gpu = None if llm_s is None and local_embed is None else (llm_s or 0.0) + (local_embed or 0.0)
+        return IndexStats(input_tokens=llm_in + embed_tokens, output_tokens=llm_out, gpu_s=gpu)
 
     def _build(self, doc, ledger: Ledger) -> tuple[list[RNode], int, float]:
         chunks = chunk_doc(doc, max_words=self.max_words, overlap=self.overlap)

@@ -113,15 +113,20 @@ class ChunkIndex:
             chunks = chunk_doc(doc, max_words=self._max_words, overlap=self._overlap)
             cache = self._cache_file(doc)
             if cache is not None and cache.exists():
-                doc_vectors = json.loads(cache.read_text())
+                cached = json.loads(cache.read_text())
+                doc_vectors = cached["vectors"]
             else:
                 result = self.embedder.embed([c.text for c in chunks]) if chunks else None
-                doc_vectors = result.vectors if result else []
-                if result:
-                    tokens, latency = tokens + result.input_tokens, latency + result.latency_s
+                cached = {"vectors": result.vectors if result else [],
+                          "input_tokens": result.input_tokens if result else 0,
+                          "latency_s": result.latency_s if result else 0.0}
+                doc_vectors = cached["vectors"]
                 if cache is not None:
                     cache.parent.mkdir(parents=True, exist_ok=True)
-                    cache.write_text(json.dumps(doc_vectors))
+                    cache.write_text(json.dumps(cached))
+            # An index costs what it took to build, whether or not this build read it from the cache:
+            # arms sharing a cache must each carry the cost.
+            tokens, latency = tokens + cached["input_tokens"], latency + cached["latency_s"]
             start = len(self.chunks)
             self.chunks += chunks
             vectors += doc_vectors

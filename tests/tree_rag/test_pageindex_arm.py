@@ -83,11 +83,12 @@ def test_registered_as_a_navigating_tree_arm():
 
 def test_index_submits_each_pdf_once_and_reuses_the_map(pdfs, tmp_path, monkeypatch):
     arm = _arm(pdfs, tmp_path, monkeypatch)
-    arm.index(_store())
+    arm.first_stats = arm.index(_store())
     assert sorted(m["aex_doc_id"] for _, m in FakeClient.instances[-1].submitted) == ["d1", "d2"]
     again = _arm(pdfs, tmp_path, monkeypatch)
-    again.index(_store())
+    stats = again.index(_store())
     assert FakeClient.instances[-1].submitted == []      # same sha256 -> already indexed
+    assert stats == arm.first_stats                      # ...but the build cost is still reported
 
 
 def test_retrieve_returns_read_pages_in_our_parse_with_a_navigation_trace(pdfs, tmp_path, monkeypatch):
@@ -139,35 +140,13 @@ def _live_up() -> bool:
         return False
 
 
-def make_termsheet_pdf(path, *, barrier="60%", shares="4.0"):
-    """Twelve-page synthetic termsheet: six sections, each a content page plus a filler continuation page."""
-    from reportlab.lib.pagesizes import A4
-    from reportlab.pdfgen import canvas
-    sections = [("1 Product Terms", ["Issuer: Example Co. (synthetic)", "Underlying: Example Index", "Denomination: CHF 5,000"]),
-                ("2 Barrier", [f"The barrier level is {barrier} of the initial fixing level.", "Barrier observation is continuous."]),
-                ("3 Coupon", ["Coupon: 4.5% p.a., paid semi-annually.", "Coupon payment dates: 15 June 2026 and 15 December 2026."]),
-                ("4 Redemption", ["If no barrier event occurs, redemption at 100% of denomination.",
-                                  f"Otherwise physical delivery of {shares} shares per note."]),
-                ("5 Risk Factors", ["Investors may lose their entire investment.", "Liquidity may be limited."]),
-                ("6 Selling Restrictions", ["The product may not be offered in the United States."])]
-    c = canvas.Canvas(str(path), pagesize=A4)
-    for title, lines in sections:
-        for part in (1, 2):
-            c.setFont("Helvetica-Bold", 16)
-            c.drawString(72, 770, title if part == 1 else f"{title} (continued)")
-            c.setFont("Helvetica", 11)
-            for i, line in enumerate(lines if part == 1 else ["General provisions apply. " * 3]):
-                c.drawString(72, 740 - 18 * i, line)
-            c.showPage()
-    c.save()
-
-
 @pytest.mark.slow
 @pytest.mark.skipif(not _live_up(), reason="hubed-dgx endpoint not reachable")
 def test_live_pageindex_reads_the_redemption_page(tmp_path):
     from aex.experiments.tree_rag.parse import parse_pdf
     pdf_dir = tmp_path / "pdfs"
     pdf_dir.mkdir()
+    from aex.experiments.tree_rag.synthetic_pdf import make_termsheet_pdf
     make_termsheet_pdf(pdf_dir / "ts1.pdf")
     store = Store([parse_pdf(pdf_dir / "ts1.pdf", "ts1")])
     nav = OpenAICompatClient(LIVE, "qwen3.8-27b", extra_body={"chat_template_kwargs": {"reasoning_effort": "medium"}})

@@ -90,8 +90,10 @@ def test_cache_skips_summaries_on_rebuild(tmp_path):
     calls = []
     _arm(calls, tmp_path).index(Store([_doc()]))
     first = len(calls)
+    fresh = _arm([], None).index(Store([_doc()]))
     stats = _arm(calls, tmp_path).index(Store([_doc()]))
-    assert len(calls) == first and stats.input_tokens == 0
+    assert len(calls) == first                                           # nothing recomputed
+    assert (stats.input_tokens, stats.output_tokens) == (fresh.input_tokens, fresh.output_tokens)  # cost still reported
 
 
 def test_needs_navigator_and_embedder():

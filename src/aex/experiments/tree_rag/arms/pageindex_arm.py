@@ -127,19 +127,28 @@ class PageIndexArm:
     def index(self, store: Store) -> IndexStats:
         self._ensure_client()
         known = json.loads(self._map_file.read_text()) if self._map_file.exists() else {}
-        ledger = Ledger()
-        with self._proxy.recording(ledger):
-            for doc_id in sorted(store.docs):
-                pdf = self.pdf_dir / f"{doc_id}.pdf"
-                if not pdf.exists():
-                    raise FileNotFoundError(f"pageindex: no PDF for document {doc_id!r} at {pdf}")
-                sha = file_sha256(pdf)
-                if known.get(doc_id, {}).get("sha256") != sha:
+        total = IndexStats()
+        for doc_id in sorted(store.docs):
+            pdf = self.pdf_dir / f"{doc_id}.pdf"
+            if not pdf.exists():
+                raise FileNotFoundError(f"pageindex: no PDF for document {doc_id!r} at {pdf}")
+            sha = file_sha256(pdf)
+            if known.get(doc_id, {}).get("sha256") != sha:
+                ledger = Ledger()
+                with self._proxy.recording(ledger):
                     submitted = self._client.submit_document(str(pdf), metadata={"aex_doc_id": doc_id, "sha256": sha})
-                    known[doc_id] = {"sha256": sha, "pageindex_id": submitted["doc_id"]}
-                    self._map_file.write_text(json.dumps(known, indent=1, sort_keys=True))
+                known[doc_id] = {"sha256": sha, "pageindex_id": submitted["doc_id"],
+                                 "cost": {"input_tokens": ledger.input_tokens, "output_tokens": ledger.output_tokens,
+                                          "gpu_s": ledger.gpu_s}}
+                self._map_file.write_text(json.dumps(known, indent=1, sort_keys=True))
+            # The tree's build cost is reported even when it already exists (vec_tree shares these trees).
+            cost = known[doc_id].get("cost", {})
+            total.input_tokens += cost.get("input_tokens", 0)
+            total.output_tokens += cost.get("output_tokens", 0)
+            if cost.get("gpu_s") is not None:
+                total.gpu_s = (total.gpu_s or 0.0) + cost["gpu_s"]
         self._ids = {d: v["pageindex_id"] for d, v in known.items()}
-        return IndexStats(input_tokens=ledger.input_tokens, output_tokens=ledger.output_tokens, gpu_s=ledger.gpu_s)
+        return total
 
     # ── query ──
 

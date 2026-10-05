@@ -66,7 +66,15 @@ def test_chunk_index_dense_and_lexical_search_within_scope(tmp_path):
     lex = index.lexical("coupon dates", ["a", "b"], k=1)
     assert index.chunks[lex[0][0]].page == 2
 
-    # second build reads the cache: no embedding tokens spent
-    again = ChunkIndex(store, HashEmbedder(dim=128), max_words=50, overlap=0, cache_dir=tmp_path)
-    assert again.build().input_tokens == 0
+    # A second build reads the cache but reports what the index cost to build: another arm sharing
+    # this cache must not look free.
+    class CountingEmbedder(HashEmbedder):
+        calls = 0
+
+        def embed(self, texts):
+            CountingEmbedder.calls += len(texts)
+            return super().embed(texts)
+
+    again = ChunkIndex(store, CountingEmbedder(dim=128), max_words=50, overlap=0, cache_dir=tmp_path)
+    assert again.build().input_tokens == stats.input_tokens and CountingEmbedder.calls == 0
     assert [i for i, _ in again.dense(qv, ["a"], k=1)] == hits[:1]
