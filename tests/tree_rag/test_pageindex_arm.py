@@ -162,8 +162,11 @@ def test_live_pageindex_reads_the_redemption_page(tmp_path):
     # Plumbing, not model quality: which pages the agent picks varies between fresh index builds (tree
     # summaries come from concurrent calls, which vLLM does not reproduce bit for bit). On one fixed tree,
     # repeated queries read identical pages. Whether it finds page 7 is what the experiment measures.
-    assert r.trace["reads"] and r.evidence
+    # About one fresh tree in three, the agent answers from node summaries without reading a page
+    # (short sections' summaries are their verbatim text): then evidence is empty, by design.
+    assert bool(r.trace["reads"]) == bool(r.evidence)
     assert all(e.text == store.get("ts1").page(e.page).text for e in r.evidence)
+    assert r.trace["pageindex_answer"].strip()
     assert r.ledger.sequential_calls >= 2 and r.ledger.input_tokens > 0
     assert stats.input_tokens > 0 and stats.gpu_s
 
