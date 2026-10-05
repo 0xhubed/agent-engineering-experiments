@@ -49,6 +49,24 @@ def _client_factory(*, model: str, storage_path: str, base_url: str):
                            chat={"model": f"openai/{model}", "backend": backend})
 
 
+def _flatten(nodes: list[dict]) -> list[dict]:
+    out = []
+    for node in nodes or []:
+        out.append(node)
+        out += _flatten(node.get("nodes") or [])
+    return out
+
+
+@register("pageindex_native")
+class PageIndexNativeRows:
+    """Not runnable: names the rows that score the SDK's own answer next to the shared answerer's."""
+    family = "tree"
+    uses_navigator = True
+
+    def __init__(self, **options) -> None:
+        raise ValueError("pageindex_native rows are written by the pageindex arm; list 'pageindex' in arms")
+
+
 def _doc_id_from_name(name: str) -> str:
     return name[:-4] if name.lower().endswith(".pdf") else name
 
@@ -67,6 +85,7 @@ class PageIndexArm:
         self._client = None
         self._proxy: MeteringProxy | None = None
         self._ids: dict[str, str] = {}
+        self._shown: list[tuple[str, str]] | None = None   # (what, pageindex id) the agent was shown, in order
 
     # ── setup ──
 
@@ -87,6 +106,19 @@ class PageIndexArm:
         self.storage_dir.mkdir(parents=True, exist_ok=True)
         self._client = _client_factory(model=self.navigator.model, storage_path=str(self.storage_dir),
                                        base_url=self._proxy.base_url)
+        self._watch("get_document", "description")
+        self._watch("get_tree", "structure")
+
+    def _watch(self, method: str, what: str) -> None:
+        """Record which documents' descriptions and structures the SDK puts in front of its agent."""
+        original = getattr(self._client, method)
+
+        def watched(pid, *args, **kwargs):
+            if self._shown is not None:
+                self._shown.append((what, pid))
+            return original(pid, *args, **kwargs)
+
+        setattr(self._client, method, watched)
 
     @property
     def _map_file(self) -> Path:
@@ -120,6 +152,7 @@ class PageIndexArm:
         ledger = Ledger()
         reads: list[tuple[float, str, list[int]]] = []
         started = time.perf_counter()
+        self._shown = []
         with _lock:
             _active = reads
         try:
@@ -130,7 +163,42 @@ class PageIndexArm:
         finally:
             with _lock:
                 _active = None
-        return Retrieval(*self._evidence_and_trace(reads, store, started, str(sdk_answer)), ledger)
+            shown, self._shown = self._shown, None
+        evidence, trace = self._evidence_and_trace(reads, store, started, str(sdk_answer))
+        if evidence:
+            trace["answered_from"] = "pages"
+        else:
+            # Decided 2026-10-05: when the agent read no page, the shared answerer gets what the agent
+            # was shown instead — document descriptions and structure summaries, marked as summaries
+            # so they never count as retrieved pages.
+            evidence = self._shown_as_evidence(shown or [], store)
+            trace["answered_from"] = "summaries" if evidence else "nothing"
+        return Retrieval(evidence, trace, ledger)
+
+    def _shown_as_evidence(self, shown: list[tuple[str, str]], store: Store) -> list[EvidencePage]:
+        by_pid = {pid: doc_id for doc_id, pid in self._ids.items()}
+        evidence: list[EvidencePage] = []
+        done: set[tuple[str, str]] = set()
+        # Structures first (the more specific view), then descriptions, each in the order shown.
+        for what in ("structure", "description"):
+            for kind, pid in shown:
+                if kind != what or (kind, pid) in done or pid not in by_pid:
+                    continue
+                done.add((kind, pid))
+                doc_id = by_pid[pid]
+                if kind == "structure":
+                    nodes = self._client.get_document_structure(pid) if hasattr(self._client, "get_document_structure") \
+                        else self._client.get_tree(pid, node_summary=True).get("result", [])
+                    for node in _flatten(nodes):
+                        if node.get("summary"):
+                            evidence.append(EvidencePage(doc_id, int(node["start_index"]), f"{node['title']}: {node['summary']}",
+                                                         kind="summary", end_page=int(node["end_index"])))
+                else:
+                    meta = self._client.get_document(pid)
+                    if meta.get("description", "").strip():
+                        evidence.append(EvidencePage(doc_id, 1, meta["description"].strip(), kind="summary",
+                                                     end_page=int(meta.get("pageNum") or store.get(doc_id).n_pages)))
+        return evidence
 
     def _evidence_and_trace(self, reads, store: Store, started: float, sdk_answer: str):
         evidence: list[EvidencePage] = []
@@ -148,7 +216,7 @@ class PageIndexArm:
                     evidence.append(EvidencePage(doc_id, p, doc.page(p).text))
         trace = {"reads": trace_reads, "pages": [[e.doc_id, e.page] for e in evidence],
                  "doc_id": None, "visited": [], "backtracks": [], "selected": None,
-                 "pageindex_answer": sdk_answer[:500]}
+                 "native_answer": sdk_answer}
         if not trace_reads or trace_reads[-1]["doc_id"] not in store.docs:
             return evidence, trace
         # Map reads onto our tree of the document the agent ended in (node ids are per document).

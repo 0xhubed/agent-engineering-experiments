@@ -25,10 +25,24 @@ class FakeClient:
     """Stands in for PageIndexClient; its chat() drives the real page-spec parser like the agent's tool does."""
     instances: list["FakeClient"] = []
 
-    def __init__(self, reads=(("2-3", "d1.pdf"), ("7", "d1.pdf")), fail=False, **config):
+    def __init__(self, reads=(("2-3", "d1.pdf"), ("7", "d1.pdf")), fail=False, shown=("d1",), structure=(),
+                 **config):
         self.config, self.reads, self.fail = config, reads, fail
+        self.shown, self.structure = shown, structure
         self.submitted, self.chats = [], []
         FakeClient.instances.append(self)
+
+    def get_document(self, pid):
+        return {"id": pid, "name": f"{pid[3:]}.pdf", "pageNum": 10,
+                "description": f"Description of {pid[3:]}: barrier 60%, 4.0 shares per note."}
+
+    def get_tree(self, pid, node_summary=False, include_text=True):
+        return {"result": [{"title": "Terms", "node_id": "0000", "start_index": 1, "end_index": 3,
+                            "summary": "Terms summary", "nodes": [
+                                {"title": "Barrier", "node_id": "0001", "start_index": 2, "end_index": 3,
+                                 "summary": "Barrier is 60%."}]},
+                           {"title": "Redemption", "node_id": "0002", "start_index": 7, "end_index": 8,
+                            "summary": "4.0 shares per note."}]}
 
     def submit_document(self, path, metadata=None):
         self.submitted.append((path, metadata))
@@ -39,6 +53,10 @@ class FakeClient:
         self.chats.append((question, doc_id, extra_body))
         if self.fail:
             raise RuntimeError("upstream exploded")
+        for d in self.shown:            # the SDK's targeting block fetches each document's metadata
+            self.get_document(f"pi-{d}")
+        for d in self.structure:        # the get_document_structure tool
+            self.get_tree(f"pi-{d}", node_summary=True)
         for pages, name in self.reads:
             at._parse_page_spec(pages, name)
         return "4.0 shares per note (page 7)."
@@ -83,7 +101,7 @@ def test_retrieve_returns_read_pages_in_our_parse_with_a_navigation_trace(pdfs, 
     assert [x["pages"] for x in t["reads"]] == [[2, 3], [7]]
     assert t["doc_id"] == "d1" and t["pages"] == [["d1", 2], ["d1", 3], ["d1", 7]]
     assert t["visited"] == ["n1", "n2", "n3"] and t["backtracks"] == ["n1", "n2"] and t["selected"] == "n3"
-    assert t["pageindex_answer"].startswith("4.0 shares")
+    assert t["native_answer"].startswith("4.0 shares")
     question, scope, extra = FakeClient.instances[-1].chats[-1]
     assert sorted(scope) == ["pi-d1", "pi-d2"]                     # the whole corpus, as released
     assert extra == {"chat_template_kwargs": {"reasoning_effort": "medium"}}
@@ -93,7 +111,8 @@ def test_no_page_read_means_no_evidence(pdfs, tmp_path, monkeypatch):
     arm = _arm(pdfs, tmp_path, monkeypatch, reads=())
     arm.index(_store())
     r = arm.retrieve(_q(), _store())
-    assert r.evidence == [] and r.trace["reads"] == [] and r.trace["selected"] is None
+    assert r.trace["reads"] == [] and r.trace["selected"] is None
+    assert all(e.kind == "summary" for e in r.evidence)            # falls back to what it was shown
 
 
 def test_sdk_failures_become_llm_errors_so_the_row_is_retried(pdfs, tmp_path, monkeypatch):
@@ -162,11 +181,12 @@ def test_live_pageindex_reads_the_redemption_page(tmp_path):
     # Plumbing, not model quality: which pages the agent picks varies between fresh index builds (tree
     # summaries come from concurrent calls, which vLLM does not reproduce bit for bit). On one fixed tree,
     # repeated queries read identical pages. Whether it finds page 7 is what the experiment measures.
-    # About one fresh tree in three, the agent answers from node summaries without reading a page
-    # (short sections' summaries are their verbatim text): then evidence is empty, by design.
-    assert bool(r.trace["reads"]) == bool(r.evidence)
-    assert all(e.text == store.get("ts1").page(e.page).text for e in r.evidence)
-    assert r.trace["pageindex_answer"].strip()
+    # About one fresh tree in three, the agent answers from the document description / node summaries
+    # without reading a page; then the evidence is what it was shown, as summaries.
+    assert r.trace["answered_from"] in ("pages", "summaries")
+    pages = [e for e in r.evidence if e.kind == "page"]
+    assert all(e.text == store.get("ts1").page(e.page).text for e in pages)
+    assert r.trace["native_answer"].strip()
     assert r.ledger.sequential_calls >= 2 and r.ledger.input_tokens > 0
     assert stats.input_tokens > 0 and stats.gpu_s
 
@@ -176,3 +196,71 @@ def test_proxy_supplies_temperature_seed_and_thinking(pdfs, tmp_path, monkeypatc
     arm.index(_store())
     assert arm._proxy.defaults == {"temperature": 0.0, "seed": 0,
                                    "chat_template_kwargs": {"reasoning_effort": "medium"}}
+
+
+def test_no_page_read_falls_back_to_what_the_agent_was_shown(pdfs, tmp_path, monkeypatch):
+    arm = _arm(pdfs, tmp_path, monkeypatch, reads=(), shown=("d1",), structure=("d1",))
+    arm.index(_store())
+    r = arm.retrieve(_q(), _store())
+    assert r.trace["answered_from"] == "summaries"
+    assert all(e.kind == "summary" for e in r.evidence)
+    assert [(e.page, e.end_page, e.text) for e in r.evidence] == [
+        (1, 3, "Terms: Terms summary"), (2, 3, "Barrier: Barrier is 60%."), (7, 8, "Redemption: 4.0 shares per note."),
+        (1, 10, "Description of d1: barrier 60%, 4.0 shares per note.")]
+
+
+def test_description_only_when_no_structure_was_fetched(pdfs, tmp_path, monkeypatch):
+    arm = _arm(pdfs, tmp_path, monkeypatch, reads=(), shown=("d1",))
+    arm.index(_store())
+    r = arm.retrieve(_q(), _store())
+    assert [(e.kind, e.page, e.end_page) for e in r.evidence] == [("summary", 1, 10)]
+
+
+def test_pages_read_means_no_summaries_and_native_answer_is_kept(pdfs, tmp_path, monkeypatch):
+    arm = _arm(pdfs, tmp_path, monkeypatch, structure=("d1",))
+    arm.index(_store())
+    r = arm.retrieve(_q(), _store())
+    assert r.trace["answered_from"] == "pages" and all(e.kind == "page" for e in r.evidence)
+    assert r.trace["native_answer"] == "4.0 shares per note (page 7)."
+
+
+def test_nothing_seen_means_no_evidence(pdfs, tmp_path, monkeypatch):
+    arm = _arm(pdfs, tmp_path, monkeypatch, reads=(), shown=())
+    arm.index(_store())
+    r = arm.retrieve(_q(), _store())
+    assert r.evidence == [] and r.trace["answered_from"] == "nothing"
+
+
+def test_runner_writes_a_judged_native_row_next_to_the_shared_answer(pdfs, tmp_path, monkeypatch):
+    from aex.common.checkpoint import Checkpoint
+    from aex.common.llm import MockClient
+    from aex.experiments.tree_rag.run import RunConfig, run_experiment
+    FakeClient.instances = []
+    monkeypatch.setattr(pia, "_client_factory", lambda **config: FakeClient(**config))
+    nav = OpenAICompatClient("http://upstream/v1", "nav")
+    judge_prompts = []
+
+    def judge(messages):
+        judge_prompts.append(messages[-1]["content"])
+        return "CORRECT"
+
+    clients = {"nav": nav, "ans": MockClient(lambda m: "ANSWER: 4", model="ans"), "judge": MockClient(judge, model="judge")}
+    cfg = RunConfig(seed=17, gold="", parsed_dir="", checkpoint="", arms=["pageindex"], navigators=["nav"],
+                    answerers=["ans"], judge="judge", models={}, splits=("test",),
+                    arm_options={"pageindex": {"pdf_dir": str(pdfs), "storage_dir": str(tmp_path / "pi")}})
+    cp = Checkpoint(tmp_path / "cp.sqlite")
+    run_experiment(cfg, clients=clients, store=_store(), questions=[_q()], checkpoint=cp)
+    rows = {r["arm"]: r for r in cp.rows()}
+    assert set(rows) == {"pageindex", "pageindex_native"}
+    native = rows["pageindex_native"]
+    assert native["answerer"] == "nav" and native["judge"] == "llm" and native["correct"] is True
+    assert native["llm_calls_sequential"] == rows["pageindex"]["llm_calls_sequential"] - 1   # no shared answer call
+    assert "4.0 shares per note (page 7)." in judge_prompts[0]
+    run_experiment(cfg, clients=clients, store=_store(), questions=[_q()], checkpoint=cp)
+    assert len(cp) == 2                                                   # resume: nothing redone
+
+
+def test_native_arm_is_registered_for_export():
+    from aex.experiments.tree_rag.export import ARM_LABELS
+    assert ARMS["pageindex_native"].family == "tree"
+    assert ARM_LABELS["pageindex_native"] == "PageIndex (its own answer)"

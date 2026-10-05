@@ -1,6 +1,7 @@
 """Run arms × navigators × answerers over the gold questions, one checkpointed row each."""
 from __future__ import annotations
 
+import copy
 import json
 import os
 import sys
@@ -135,28 +136,50 @@ def _evaluate_one(cfg: RunConfig, q: Question, arm, navigator: str, answerer_id:
                       "tokens_query": None, "tokens_index_amortised": amortised_tokens,
                       "cost_usd": None, "gpu_s": None, "failure": "not_applicable", "detail": detail}
 
+    parse_failure = any(not store.get(d).page(p).text.strip() for d, p in q.evidence)
+    n = max(n_questions, 1)
+    prices = {model: tuple(pair) for model, pair in cfg.prices.items()}
+
+    def costs(ledger) -> dict:
+        return {"latency_s": ledger.latency_s, "llm_calls_sequential": ledger.sequential_calls,
+                "tokens_query": ledger.input_tokens + ledger.output_tokens,
+                "tokens_index_amortised": amortised_tokens,
+                "cost_usd": _add(ledger.cost_usd(prices), index.cost_usd / n if index.cost_usd is not None else None),
+                "gpu_s": _add(ledger.gpu_s, index.gpu_s / n if index.gpu_s is not None else None)}
+
+    evidence_fields = {"evidence_recall": recall, "evidence_precision": precision, "wrong_doc": wrong_doc}
+    native = None
+    if retrieval.trace.get("native_answer") is not None:
+        # The arm's own end-to-end answer (e.g. the PageIndex SDK's), graded by the judge: it is prose
+        # without an ANSWER: line, so the deterministic scorers would misread it. Cost = retrieval only.
+        native_text = str(retrieval.trace["native_answer"])
+        native_ok, _ = LLMJudge(clients[cfg.judge]).judge(q.question, _gold_text(q), native_text)
+        native_failure = ("answered_unanswerable" if q.gold.kind == "unanswerable" and not native_ok else
+                          classify_failure(correct=native_ok, prior=None, recall=recall, wrong_doc=wrong_doc,
+                                           parse_failure=parse_failure))
+        native = _base_row(q, f"{arm.name}_native", navigator, navigator) | evidence_fields | costs(copy.deepcopy(retrieval.ledger)) | {
+            "correct": native_ok, "judge": "llm", "failure": native_failure,
+            "detail": detail | {"answer": native_text[:500], "raw": native_text, "truncated": False}}
+
     ans = answer(q, retrieval, clients[answerer_id], max_evidence_words=cfg.max_evidence_words,
                  max_tokens=cfg.max_answer_tokens, seed=cfg.seed)
     result = score(ans.text, q.gold)
     correct, method = result.correct, result.method
     if correct is None:
         correct, _ = LLMJudge(clients[cfg.judge]).judge(q.question, str(q.gold.value), extract_final(ans.text))
-    parse_failure = any(not store.get(d).page(p).text.strip() for d, p in q.evidence)
-    ledger = retrieval.ledger
-    n = max(n_questions, 1)
-    prices = {model: tuple(pair) for model, pair in cfg.prices.items()}
-    return row | {
+    main = row | evidence_fields | costs(retrieval.ledger) | {
         "correct": correct, "judge": method,
-        "evidence_recall": recall, "evidence_precision": precision, "wrong_doc": wrong_doc,
-        "latency_s": ledger.latency_s, "llm_calls_sequential": ledger.sequential_calls,
-        "tokens_query": ledger.input_tokens + ledger.output_tokens,
-        "tokens_index_amortised": amortised_tokens,
-        "cost_usd": _add(ledger.cost_usd(prices), index.cost_usd / n if index.cost_usd is not None else None),
-        "gpu_s": _add(ledger.gpu_s, index.gpu_s / n if index.gpu_s is not None else None),
         "failure": classify_failure(correct=correct, prior=result.failure, recall=recall,
                                     wrong_doc=wrong_doc, parse_failure=parse_failure),
         "detail": detail | {"answer": extract_final(ans.text), "raw": ans.text, "truncated": ans.truncated},
     }
+    return (main, native) if native is not None else main
+
+
+def _gold_text(q: Question) -> str:
+    if q.gold.kind == "unanswerable":
+        return "Not stated in the document (the document does not contain this information)"
+    return "; ".join(q.gold.value) if isinstance(q.gold.value, list) else str(q.gold.value)
 
 
 def run_experiment(cfg: RunConfig, *, clients: dict[str, ChatClient], store: Store,
@@ -194,6 +217,9 @@ def run_experiment(cfg: RunConfig, *, clients: dict[str, ChatClient], store: Sto
                                         index, len(selected))
                 except LLMError as exc:
                     row = _error_row(q, arm_name, navigator, answerer_id, str(exc))
+                if isinstance(row, tuple):
+                    row, native = row
+                    checkpoint.put(row_key(q.qid, native["arm"], navigator, native["answerer"]), native)
                 checkpoint.put(key, row)
 
 

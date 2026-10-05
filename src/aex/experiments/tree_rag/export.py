@@ -23,6 +23,7 @@ ARM_LABELS = {
     "oracle": "Oracle (gold pages)", "chunk_embed": "Chunks + embeddings",
     "hybrid_rerank": "Hybrid + reranker", "raptor": "RAPTOR", "pageindex": "PageIndex",
     "vec_tree": "Vectors → tree", "long_context": "Whole document",
+    "pageindex_native": "PageIndex (its own answer)",
 }
 RUN_FIELDS = ("qid", "dataset", "regime", "qtype", "arm", "navigator", "answerer", "correct", "judge",
               "evidence_recall", "evidence_precision", "wrong_doc", "latency_s", "llm_calls_sequential",
