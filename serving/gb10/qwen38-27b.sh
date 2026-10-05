@@ -24,7 +24,10 @@ docker run -d --name "$NAME" --restart unless-stopped --gpus all --ipc host \
   --enable-auto-tool-choice --tool-call-parser=qwen3_coder \
   '--speculative-config={"method":"mtp","num_speculative_tokens":2}' \
   --max-num-seqs=4 \
+  --gpu-memory-utilization=0.62 \
   --max-model-len=262144
+# 0.62 of 121 GiB: 22 GiB weights + ~50 GiB KV (4 x 262k-token contexts need ~36 GiB); the default 0.92
+# reserved 85 GiB of KV and left nothing for the embedding and reranker servers.
 # No --tensor-parallel-size (single GB10). No --kv-cache-dtype fp8: measured slower than f16 on Spark unified memory.
 # Thinking is chosen per request (chat_template_kwargs.enable_thinking); the template defaults it ON.
 
