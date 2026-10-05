@@ -123,3 +123,17 @@ def test_cli_smoke_run(tmp_path):
                          cwd=REPO, capture_output=True, text=True, check=True)
     assert "oracle" in out.stdout
     assert (tmp_path / "smoke.sqlite.manifest.json").exists()
+
+
+def test_build_client_passes_extra_body():
+    from aex.experiments.tree_rag.run import build_client
+    client = build_client("q", {"kind": "openai", "base_url": "http://x/v1", "model": "q",
+                                "extra_body": {"chat_template_kwargs": {"enable_thinking": False}}})
+    assert client.extra_body == {"chat_template_kwargs": {"enable_thinking": False}}
+
+
+def test_dgx_smoke_config_loads():
+    cfg = RunConfig.from_yaml(REPO / "configs" / "tree_rag" / "smoke-dgx.yaml")
+    assert cfg.max_answer_tokens >= 8192
+    assert cfg.models[cfg.answerers[0]]["extra_body"]["chat_template_kwargs"]["reasoning_effort"] == "medium"
+    assert cfg.models[cfg.judge]["extra_body"]["chat_template_kwargs"]["enable_thinking"] is False

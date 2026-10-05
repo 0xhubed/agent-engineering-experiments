@@ -1,3 +1,4 @@
+import json
 import httpx
 import pytest
 
@@ -65,3 +66,28 @@ def test_compat_client_does_not_retry_4xx():
     with pytest.raises(LLMError):
         client.complete([{"role": "user", "content": "q"}])
     assert calls["n"] == 1
+
+
+def test_compat_client_merges_extra_body_and_reports_finish_reason():
+    seen = {}
+
+    def handler(request):
+        seen["body"] = json.loads(request.read())
+        return httpx.Response(200, json={
+            "choices": [{"message": {"content": "x"}, "finish_reason": "length"}],
+            "usage": {"prompt_tokens": 1, "completion_tokens": 1},
+        })
+
+    client = OpenAICompatClient("http://x/v1", "m", transport=httpx.MockTransport(handler),
+                                extra_body={"chat_template_kwargs": {"reasoning_effort": "medium"}})
+    out = client.complete([{"role": "user", "content": "q"}])
+    assert seen["body"]["chat_template_kwargs"] == {"reasoning_effort": "medium"}
+    assert seen["body"]["temperature"] == 0.0
+    assert out.finish_reason == "length"
+
+
+def test_finish_reason_defaults_to_stop():
+    assert _ok_response().json()["choices"][0].get("finish_reason") is None
+    client = OpenAICompatClient("http://x/v1", "m", transport=httpx.MockTransport(lambda r: _ok_response()))
+    assert client.complete([{"role": "user", "content": "q"}]).finish_reason == "stop"
+    assert MockClient(lambda m: "a").complete([{"role": "user", "content": "q"}]).finish_reason == "stop"

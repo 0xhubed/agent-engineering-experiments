@@ -35,3 +35,20 @@ def test_answer_sends_question_and_excerpts_and_records_ledger():
     assert "NOT_STATED" in seen["prompt"]
     assert out.text.endswith("ANSWER: 60%") and not out.truncated
     assert retrieval.ledger.sequential_calls == 1
+
+
+class _TruncatingClient:
+    model, local = "t", True
+
+    def complete(self, messages, **kw):
+        from aex.common.llm import Completion
+        return Completion("still thinking", 10, kw["max_tokens"], 0.0, "t", finish_reason="length")
+
+
+def test_truncated_answer_raises_instead_of_scoring_wrong():
+    import pytest
+    from aex.common.llm import LLMError
+    retrieval = Retrieval([EvidencePage("d1", 2, "Barrier: 60%")], {}, Ledger())
+    with pytest.raises(LLMError, match="max_tokens=64"):
+        answer(_q(), retrieval, _TruncatingClient(), max_tokens=64)
+    assert retrieval.ledger.output_tokens == 64   # the spent tokens are still accounted

@@ -35,6 +35,7 @@ class RunConfig:
     splits: tuple[str, ...] = ("test",)
     dev_fraction: float = 0.2
     max_evidence_words: int = 9000
+    max_answer_tokens: int = 1024
     prices: dict[str, list[float]] = field(default_factory=dict)
 
     @classmethod
@@ -50,7 +51,7 @@ def build_client(model_id: str, spec: dict) -> ChatClient:
     if spec["kind"] == "openai":
         api_key = os.environ.get(spec.get("api_key_env", ""), "EMPTY")
         return OpenAICompatClient(spec["base_url"], spec["model"], api_key=api_key,
-                                  local=spec.get("local", True))
+                                  local=spec.get("local", True), extra_body=spec.get("extra_body"))
     raise ValueError(f"model {model_id!r}: unknown kind {spec['kind']!r}")
 
 
@@ -109,7 +110,8 @@ def _evaluate_one(cfg: RunConfig, q: Question, arm, navigator: str, answerer_id:
                       "tokens_query": None, "tokens_index_amortised": amortised_tokens,
                       "cost_usd": None, "gpu_s": None, "failure": "not_applicable", "detail": detail}
 
-    ans = answer(q, retrieval, clients[answerer_id], max_evidence_words=cfg.max_evidence_words, seed=cfg.seed)
+    ans = answer(q, retrieval, clients[answerer_id], max_evidence_words=cfg.max_evidence_words,
+                 max_tokens=cfg.max_answer_tokens, seed=cfg.seed)
     result = score(ans.text, q.gold)
     correct, method = result.correct, result.method
     if correct is None:

@@ -19,6 +19,7 @@ class Completion:
     output_tokens: int
     latency_s: float
     model: str
+    finish_reason: str = "stop"   # "length" = hit max_tokens; the text may be incomplete
 
 
 class LLMError(RuntimeError):
@@ -38,8 +39,10 @@ class OpenAICompatClient:
 
     def __init__(self, base_url: str, model: str, *, api_key: str = "EMPTY", local: bool = True,
                  retries: int = 3, backoff_s: float = 1.0, timeout_s: float = 300.0,
-                 transport: httpx.BaseTransport | None = None) -> None:
+                 transport: httpx.BaseTransport | None = None, extra_body: dict | None = None) -> None:
         self.model = model
+        # Server-specific request fields, e.g. {"chat_template_kwargs": {"reasoning_effort": "medium"}}.
+        self.extra_body = dict(extra_body or {})
         self.local = local
         self._retries = retries
         self._backoff_s = backoff_s
@@ -53,7 +56,7 @@ class OpenAICompatClient:
     def complete(self, messages: list[dict], *, max_tokens: int = 1024,
                  temperature: float = 0.0, seed: int = 0) -> Completion:
         body = {"model": self.model, "messages": messages, "max_tokens": max_tokens,
-                "temperature": temperature, "seed": seed}
+                "temperature": temperature, "seed": seed, **self.extra_body}
         last_error = "no attempt made"
         for attempt in range(self._retries):
             started = time.perf_counter()
@@ -72,12 +75,14 @@ class OpenAICompatClient:
                 raise LLMError(f"HTTP {response.status_code}: {response.text[:200]}")
             data = response.json()
             usage = data.get("usage", {})
+            choice = data["choices"][0]
             return Completion(
-                text=data["choices"][0]["message"]["content"] or "",
+                text=choice["message"]["content"] or "",
                 input_tokens=int(usage.get("prompt_tokens", 0)),
                 output_tokens=int(usage.get("completion_tokens", 0)),
                 latency_s=elapsed,
                 model=self.model,
+                finish_reason=choice.get("finish_reason") or "stop",
             )
         raise LLMError(f"{self.model}: failed after {self._retries} attempts ({last_error})")
 
