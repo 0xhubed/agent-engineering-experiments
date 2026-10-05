@@ -25,6 +25,7 @@ class Checkpoint:
             " key TEXT UNIQUE NOT NULL,"
             " row TEXT NOT NULL)"
         )
+        self._db.execute("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
         self._db.commit()
 
     def done(self, key: str) -> bool:
@@ -41,6 +42,16 @@ class Checkpoint:
                 "ON CONFLICT(key) DO UPDATE SET row = excluded.row",
                 (key, json.dumps(row, sort_keys=True)),
             )
+
+    def meta_get(self, key: str) -> dict | None:
+        """Run-level facts kept apart from result rows (e.g. the cost of the first index build)."""
+        found = self._db.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
+        return json.loads(found[0]) if found else None
+
+    def meta_put(self, key: str, value: dict) -> None:
+        with self._db:
+            self._db.execute("INSERT INTO meta (key, value) VALUES (?, ?) "
+                             "ON CONFLICT(key) DO UPDATE SET value = excluded.value", (key, json.dumps(value)))
 
     def rows(self) -> list[dict]:
         return [json.loads(r) for (r,) in self._db.execute("SELECT row FROM rows ORDER BY seq")]

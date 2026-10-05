@@ -36,6 +36,9 @@ class RunConfig:
     dev_fraction: float = 0.2
     max_evidence_words: int = 9000
     max_answer_tokens: int = 1024
+    services: dict[str, dict] = field(default_factory=dict)      # embedder / reranker specs shared by arms
+    arm_options: dict[str, dict] = field(default_factory=dict)   # per-arm keyword options
+    scope: dict[str, str] = field(default_factory=dict)          # dataset -> "corpus" | "question_docs"
     prices: dict[str, list[float]] = field(default_factory=dict)
 
     @classmethod
@@ -55,9 +58,29 @@ def build_client(model_id: str, spec: dict) -> ChatClient:
     raise ValueError(f"model {model_id!r}: unknown kind {spec['kind']!r}")
 
 
+def build_service(name: str, spec: dict):
+    from aex.common.embed import (HashEmbedder, OpenAICompatEmbedder, OpenAICompatReranker,
+                                  OverlapReranker)
+    kind = spec["kind"]
+    if kind == "hash":
+        return HashEmbedder(dim=spec.get("dim", 256))
+    if kind == "overlap":
+        return OverlapReranker()
+    api_key = os.environ.get(spec.get("api_key_env", ""), "EMPTY")
+    if kind == "openai_embed":
+        return OpenAICompatEmbedder(spec["base_url"], spec["model"], query_prefix=spec.get("query_prefix", ""),
+                                    api_key=api_key, local=spec.get("local", True))
+    if kind == "openai_rerank":
+        return OpenAICompatReranker(spec["base_url"], spec["model"], api_key=api_key, local=spec.get("local", True),
+                                    query_template=spec.get("query_template", "{query}"),
+                                    document_template=spec.get("document_template", "{document}"))
+    raise ValueError(f"service {name!r}: unknown kind {kind!r}")
+
+
 def evidence_metrics(q: Question, retrieval: Retrieval) -> tuple[float | None, float | None, bool | None]:
     gold = set(q.evidence)
-    got = {(e.doc_id, e.page) for e in retrieval.evidence}
+    # Generated summaries are not document pages: they never count as retrieved evidence.
+    got = {(e.doc_id, e.page) for e in retrieval.evidence if e.kind != "summary"}
     recall = len(gold & got) / len(gold) if gold else None
     precision = len(gold & got) / len(got) if got else None
     wrong_doc = None if not got else not any(doc_id in q.doc_ids for doc_id, _ in got)
@@ -102,7 +125,9 @@ def _evaluate_one(cfg: RunConfig, q: Question, arm, navigator: str, answerer_id:
     recall, precision, wrong_doc = evidence_metrics(q, retrieval)
     row = _base_row(q, arm.name, navigator, answerer_id)
     amortised_tokens = (index.input_tokens + index.output_tokens) // max(n_questions, 1)
-    detail = {"evidence": [[e.doc_id, e.page] for e in retrieval.evidence], "trace": retrieval.trace,
+    detail = {"evidence": [{"doc_id": e.doc_id, "page": e.page, "kind": e.kind, "end_page": e.end_page,
+                            "snippet": " ".join(e.text.split())[:300]} for e in retrieval.evidence],
+              "trace": retrieval.trace,
               "error": None, "answer": None, "raw": None, "truncated": False}
     if retrieval.not_applicable:
         return row | {"correct": None, "judge": None, "evidence_recall": None, "evidence_precision": None,
@@ -135,26 +160,41 @@ def _evaluate_one(cfg: RunConfig, q: Question, arm, navigator: str, answerer_id:
 
 
 def run_experiment(cfg: RunConfig, *, clients: dict[str, ChatClient], store: Store,
-                   questions: list[Question], checkpoint: Checkpoint) -> None:
+                   questions: list[Question], checkpoint: Checkpoint, services: dict | None = None) -> None:
     selected = [q for q in questions if q.split in cfg.splits]
+
+    def pending(key: str) -> bool:
+        existing = checkpoint.get(key)
+        return existing is None or existing.get("failure") == "error"
+
     for arm_name in cfg.arms:
-        probe = make_arm(arm_name)
+        options = {**(services or {}), "scopes": cfg.scope, **cfg.arm_options.get(arm_name, {})}
+        probe = make_arm(arm_name, **options)
         navigators = cfg.navigators if probe.uses_navigator else ["none"]
         for navigator in navigators:
-            arm = make_arm(arm_name, navigator=clients.get(navigator)) if probe.uses_navigator else probe
-            index = arm.index(store)
-            for q in selected:
-                for answerer_id in cfg.answerers:
-                    key = row_key(q.qid, arm_name, navigator, answerer_id)
-                    existing = checkpoint.get(key)
-                    if existing is not None and existing.get("failure") != "error":
-                        continue
-                    try:
-                        row = _evaluate_one(cfg, q, arm, navigator, answerer_id, clients, store,
-                                            index, len(selected))
-                    except LLMError as exc:
-                        row = _error_row(q, arm_name, navigator, answerer_id, str(exc))
-                    checkpoint.put(key, row)
+            todo = [(q, a) for q in selected for a in cfg.answerers
+                    if pending(row_key(q.qid, arm_name, navigator, a))]
+            if not todo:
+                continue
+            arm = make_arm(arm_name, navigator=clients.get(navigator), **options) if probe.uses_navigator else probe
+            built = arm.index(store)
+            # Indexing cost is recorded once: a resumed run reads cached indexes for free, but its
+            # amortised cost must stay what the first build paid.
+            meta_key = f"index|{arm_name}|{navigator}"
+            stored = checkpoint.meta_get(meta_key)
+            if stored is None:
+                checkpoint.meta_put(meta_key, asdict(built))
+                index = built
+            else:
+                index = IndexStats(**stored)
+            for q, answerer_id in todo:
+                key = row_key(q.qid, arm_name, navigator, answerer_id)
+                try:
+                    row = _evaluate_one(cfg, q, arm, navigator, answerer_id, clients, store,
+                                        index, len(selected))
+                except LLMError as exc:
+                    row = _error_row(q, arm_name, navigator, answerer_id, str(exc))
+                checkpoint.put(key, row)
 
 
 def _summary(rows: list[dict]) -> str:
@@ -170,11 +210,23 @@ def _summary(rows: list[dict]) -> str:
     return "\n".join(lines)
 
 
+GROUPS_FILE = "groups.json"   # doc_id -> corpus, written by the corpus parse step
+
+
+def load_store(parsed_dir: str | Path) -> Store:
+    parsed_dir = Path(parsed_dir)
+    groups_path = parsed_dir / GROUPS_FILE
+    groups = json.loads(groups_path.read_text()) if groups_path.exists() else None
+    docs = (ParsedDoc.from_dict(json.loads(p.read_text()))
+            for p in sorted(parsed_dir.glob("*.json")) if p.name != GROUPS_FILE)
+    return Store(docs, groups=groups)
+
+
 def main(argv: list[str]) -> int:
     cfg = RunConfig.from_yaml(argv[1])
     questions = load_questions(cfg.gold, seed=cfg.seed, dev_fraction=cfg.dev_fraction)
-    store = Store(ParsedDoc.from_dict(json.loads(p.read_text()))
-                  for p in sorted(Path(cfg.parsed_dir).glob("*.json")))
+    store = load_store(cfg.parsed_dir)
+    services = {name: build_service(name, spec) for name, spec in cfg.services.items()}
     used = set(cfg.answerers) | {cfg.judge} | {n for n in cfg.navigators if n != "none"}
     clients = {mid: build_client(mid, cfg.models[mid]) for mid in used}
     manifest = build_manifest(asdict(cfg), models={mid: cfg.models[mid].get("revision", "unknown") for mid in used})
@@ -182,7 +234,8 @@ def main(argv: list[str]) -> int:
     Path(f"{cfg.checkpoint}.manifest.json").write_text(
         json.dumps(manifest | {"manifest_hash": manifest_hash(manifest)}, indent=2))
     checkpoint = Checkpoint(cfg.checkpoint)
-    run_experiment(cfg, clients=clients, store=store, questions=questions, checkpoint=checkpoint)
+    run_experiment(cfg, clients=clients, store=store, questions=questions, checkpoint=checkpoint,
+                   services=services)
     print(_summary(checkpoint.rows()))
     return 0
 

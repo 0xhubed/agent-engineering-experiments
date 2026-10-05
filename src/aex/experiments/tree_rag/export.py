@@ -38,6 +38,13 @@ def _snippet(text: str, limit: int) -> str:
     return re.sub(r"\s+", " ", text).strip()[:limit]
 
 
+def _evidence_item(e, store: Store, limit: int) -> dict:
+    if isinstance(e, list):   # phase-0 rows: [doc_id, page]
+        doc_id, page = e
+        return {"doc_id": doc_id, "page": page, "kind": "page", "snippet": _snippet(store.get(doc_id).page(page).text, limit)}
+    return {"doc_id": e["doc_id"], "page": e["page"], "kind": e.get("kind", "page"), "snippet": _snippet(e["snippet"], limit)}
+
+
 def _is_local(spec: dict) -> bool:
     return spec.get("local", spec.get("kind") == "mock")
 
@@ -65,8 +72,7 @@ def _shard_entries(rows, questions, store, snippet_chars):
         results = []
         for r in by_qid[q.qid]:
             detail = r.get("detail", {})
-            evidence = [{"doc_id": d, "page": p, "snippet": _snippet(store.get(d).page(p).text, snippet_chars)}
-                        for d, p in detail.get("evidence", [])]
+            evidence = [_evidence_item(e, store, snippet_chars) for e in detail.get("evidence", [])]
             results.append({"arm": r["arm"], "navigator": r["navigator"], "answerer": r["answerer"],
                             "answer": detail.get("answer"), "correct": r["correct"], "failure": r["failure"],
                             "latency_s": r["latency_s"], "tokens_query": r["tokens_query"],
@@ -123,8 +129,7 @@ def export(rows: list[dict], *, questions: list[Question], store: Store, models:
 def main(argv: list[str]) -> int:
     from aex.common.checkpoint import Checkpoint
     from aex.experiments.tree_rag.gold import load_questions
-    from aex.experiments.tree_rag.run import RunConfig
-    from aex.experiments.tree_rag.types import ParsedDoc
+    from aex.experiments.tree_rag.run import RunConfig, load_store
 
     parser = argparse.ArgumentParser(prog="export")
     parser.add_argument("config")
@@ -134,7 +139,7 @@ def main(argv: list[str]) -> int:
     args = parser.parse_args(argv[1:])
     cfg = RunConfig.from_yaml(args.config)
     manifest = json.loads(Path(f"{cfg.checkpoint}.manifest.json").read_text())
-    store = Store(ParsedDoc.from_dict(json.loads(p.read_text())) for p in sorted(Path(cfg.parsed_dir).glob("*.json")))
+    store = load_store(cfg.parsed_dir)
     path = export(Checkpoint(cfg.checkpoint).rows(),
                   questions=load_questions(cfg.gold, seed=cfg.seed, dev_fraction=cfg.dev_fraction),
                   store=store, models=cfg.models, judge=cfg.judge, manifest_hash=manifest["manifest_hash"],

@@ -73,6 +73,8 @@ class EvidencePage:
     doc_id: str
     page: int
     text: str
+    kind: str = "page"            # "page" | "chunk" (text from this page) | "summary" (generated; pages page..end_page)
+    end_page: int | None = None
 
 
 @dataclass
@@ -81,6 +83,7 @@ class Retrieval:
     trace: dict
     ledger: Ledger
     not_applicable: bool = False
+    max_evidence_words: int | None = None   # overrides the shared budget (only long_context uses this)
 
 
 @dataclass(frozen=True)

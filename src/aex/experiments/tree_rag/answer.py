@@ -25,7 +25,9 @@ def format_excerpts(evidence: list[EvidencePage], *, max_words: int) -> tuple[st
         words = ev.text.split()
         if len(words) > budget:
             words, truncated = words[:budget], True
-        blocks.append(f"[{ev.doc_id} p.{ev.page}]\n{' '.join(words)}")
+        label = (f"{ev.doc_id} summary p.{ev.page}-{ev.end_page}" if ev.kind == "summary"
+                 else f"{ev.doc_id} p.{ev.page}")
+        blocks.append(f"[{label}]\n{' '.join(words)}")
         budget -= len(words)
         if budget <= 0:
             truncated = truncated or ev is not evidence[-1]
@@ -35,7 +37,8 @@ def format_excerpts(evidence: list[EvidencePage], *, max_words: int) -> tuple[st
 
 def answer(q: Question, retrieval: Retrieval, client: ChatClient, *,
            max_evidence_words: int = 9000, max_tokens: int = 1024, seed: int = 0) -> Answer:
-    excerpts, truncated = format_excerpts(retrieval.evidence, max_words=max_evidence_words)
+    budget = retrieval.max_evidence_words or max_evidence_words
+    excerpts, truncated = format_excerpts(retrieval.evidence, max_words=budget)
     prompt = ANSWER_PROMPT.format(question=q.question, excerpts=excerpts)
     completion = client.complete([{"role": "user", "content": prompt}], max_tokens=max_tokens, seed=seed)
     retrieval.ledger.record(completion, local=client.local)

@@ -16,7 +16,7 @@ from aex.common.accounting import Ledger
 from aex.common.checkpoint import Checkpoint
 from aex.common.llm import Completion, MockClient
 from aex.common.scoring import GoldAnswer
-from aex.experiments.tree_rag.arms import IndexStats, Store, register
+from aex.experiments.tree_rag.arms import ARMS, IndexStats, Store
 from aex.experiments.tree_rag.export import export
 from aex.experiments.tree_rag.gold import assign_split
 from aex.experiments.tree_rag.parse import build_tree
@@ -165,7 +165,6 @@ def _tree_like(name, navigator, q, store, rng, ledger, hit):
 
 
 def _simulated_arm(name: str) -> type:
-    @register(name)
     class SimulatedArm:
         family = FAMILY[name]
         uses_navigator = name in NAVIGATING
@@ -197,11 +196,12 @@ def _simulated_arm(name: str) -> type:
             evidence = [EvidencePage(d, p, store.get(d).page(p).text) for d, p in pages]
             return Retrieval(evidence, trace, ledger)
 
+    SimulatedArm.name = name
     return SimulatedArm
 
 
-for _name in HIT_RATE:
-    _simulated_arm(_name)
+# Not registered globally: the real arms share these names. build_fixture swaps them in temporarily.
+SIMULATED = {name: _simulated_arm(name) for name in HIT_RATE}
 
 
 # ---------- simulated answerer ----------
@@ -238,15 +238,21 @@ def build_fixture(out_dir: str | Path) -> Path:
     cfg = RunConfig(seed=17, gold="", parsed_dir="", checkpoint="", arms=["oracle", *HIT_RATE],
                     navigators=[LOCAL, FRONTIER], answerers=[LOCAL], judge=LOCAL, models={},
                     splits=("test",), prices={FRONTIER: [3.0, 15.0]})
-    with tempfile.TemporaryDirectory() as tmp:
-        checkpoint = Checkpoint(Path(tmp) / "fixture.sqlite")
-        run_experiment(cfg, clients=clients, store=store, questions=questions, checkpoint=checkpoint)
-        rows = checkpoint.rows()
-        checkpoint.close()
-    return export(rows, questions=questions, store=store,
-                  models={LOCAL: {"kind": "openai", "local": True}, FRONTIER: {"kind": "openai", "local": False}},
-                  judge=LOCAL, manifest_hash="sha256:" + "f" * 64, data_version=FIXTURE_VERSION,
-                  out_dir=out_dir)
+    saved = dict(ARMS)
+    ARMS.update(SIMULATED)
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            checkpoint = Checkpoint(Path(tmp) / "fixture.sqlite")
+            run_experiment(cfg, clients=clients, store=store, questions=questions, checkpoint=checkpoint)
+            rows = checkpoint.rows()
+            checkpoint.close()
+        return export(rows, questions=questions, store=store,
+                      models={LOCAL: {"kind": "openai", "local": True}, FRONTIER: {"kind": "openai", "local": False}},
+                      judge=LOCAL, manifest_hash="sha256:" + "f" * 64, data_version=FIXTURE_VERSION,
+                      out_dir=out_dir)
+    finally:
+        ARMS.clear()
+        ARMS.update(saved)
 
 
 if __name__ == "__main__":
