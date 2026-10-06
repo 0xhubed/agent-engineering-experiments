@@ -24,3 +24,7 @@ uv run python -m aex.corpus.financebench gold       # -> gold/financebench.jsonl
 
 **Explorer:** question text, answers and snippets are redacted in the public explorer until the licence
 sign-off (decision D3); aggregates are unaffected (`export(..., redact_datasets=...)`).
+
+**Parse (2026-10-06):** all 84 filings parsed (`docling-no-ocr-v1`, ~5 h on CPU; trees `outline-or-numbering-v2`,
+14 from the PDF outline). 128 pages come out empty (cover/blank pages and text in graphics); none of the 189
+evidence pages is among them (every evidence page has ≥ 20 words).
