@@ -99,3 +99,17 @@ def test_collects_all_failures_when_asked(tmp_path, excl):
     out = fetch_all(entries, tmp_path / "data", excluded=excl, transport=_transport([]), min_interval_s=0,
                     errors=errors)
     assert [e.doc_id for e in out] == ["ok"] and len(errors) == 2
+
+
+def test_manual_documents_are_never_fetched(tmp_path, excl):
+    from dataclasses import replace
+    log = []
+    manual = replace(_entry("bp", "/ok.pdf"), licence_note="manual download: site terms forbid automated access")
+    with pytest.raises(FetchError, match="download it by hand"):
+        fetch_all([manual], tmp_path / "data", excluded=excl, transport=_transport(log), min_interval_s=0)
+    assert "/ok.pdf" not in log and "/robots.txt" not in log
+    target = tmp_path / "data" / "ts" / "bp.pdf"
+    target.parent.mkdir(parents=True)
+    target.write_bytes(PDFS["/ok.pdf"])
+    (out,) = fetch_all([manual], tmp_path / "data", excluded=excl, transport=_transport(log), min_interval_s=0)
+    assert out.sha256.startswith("sha256:") and out.pages == 3 and log == []

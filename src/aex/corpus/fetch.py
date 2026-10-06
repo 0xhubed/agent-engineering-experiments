@@ -2,7 +2,9 @@
 
 Usage: python -m aex.corpus.fetch corpus/<corpus>/manifest.csv [--data data]
 
-Rules this enforces, in order: robots.txt allows the URL (no robots.txt = allowed); the
+Documents whose licence_note starts with "manual download" are never fetched: their host's terms
+forbid automated access, so a person downloads them and this only verifies and screens the file.
+Rules this enforces for the rest, in order: robots.txt allows the URL (no robots.txt = allowed); the
 response is a PDF; the checksum matches the manifest (or is pinned on first download); the
 document text names no excluded issuer anywhere (otherwise the file is deleted). Requests to
 one host are spaced by `min_interval_s`. Bot protection is never worked around: a 403/429
@@ -75,7 +77,11 @@ class _Polite:
 
 def fetch_one(entry: DocEntry, data_dir: Path, *, excluded: ExclusionList, client: _Polite) -> DocEntry:
     target = data_dir / entry.corpus / f"{entry.doc_id}.pdf"
-    if not (target.exists() and entry.sha256 and _sha(target.read_bytes()) == entry.sha256):
+    manual = entry.licence_note.startswith("manual download")
+    if manual and not target.exists():
+        # The host's terms forbid automated access: a person downloads it in a browser.
+        raise FetchError(entry.doc_id, f"manual document: download it by hand from {entry.url} to {target}")
+    if not manual and not (target.exists() and entry.sha256 and _sha(target.read_bytes()) == entry.sha256):
         if not client.allowed(entry.url):
             raise FetchError(entry.doc_id, f"robots.txt disallows {entry.url}")
         response = client.get(entry.url)
@@ -88,6 +94,8 @@ def fetch_one(entry: DocEntry, data_dir: Path, *, excluded: ExclusionList, clien
             raise FetchError(entry.doc_id, f"sha256 mismatch: manifest {entry.sha256}, downloaded {sha}")
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(response.content)
+    if manual and entry.sha256 and _sha(target.read_bytes()) != entry.sha256:
+        raise FetchError(entry.doc_id, f"sha256 mismatch for the hand-downloaded file {target}")
     text, pages = pdf_text_and_pages(target)
     if excluded.mentioned_in(text):
         target.unlink()
