@@ -7,12 +7,13 @@ with a reason) and become gold only through the review app, which a person drive
 
 Stages, in order (each resumable; finished tasks are logged in gold/drafts/_done.jsonl):
 - facts          regime A: key terms per product, each with page and verbatim quote
+- disambiguation regime A, no model call: product descriptions (needed before review starts) and
+                 template questions about a field whose value differs between near-duplicate
+                 products (same issuer, type and underlyings)
 - window         lookup / table / computation drafts from page windows (regime A: the key-terms
                  pages; regime B: seeded windows across each prospectus)
 - unanswerable   candidates from the same windows, each confirmed absent against the whole document
                  (or its best-matching pages when the document is too long)
-- disambiguation regime A, no model call: template questions about a field whose value differs
-                 between near-duplicate products (same issuer, type and underlyings)
 - cross_doc      regime A termsheet <-> the securities note it completes
 
 Regime-A questions refer to the product as "{product}". The review app renders every accepted item
@@ -45,7 +46,7 @@ from aex.experiments.tree_rag.types import ParsedDoc
 
 PROMPT_VERSION = "draft-v1"
 PROMPTS = Path(__file__).parent / "prompts"
-STAGES = ("facts", "window", "unanswerable", "disambiguation", "cross_doc")
+STAGES = ("facts", "disambiguation", "window", "unanswerable", "cross_doc")
 KINDS = {"exact", "numeric", "date", "date_list", "free"}
 
 ISSUER_SHORT = {"Bank Julius Baer & Co. Ltd.": "Julius Baer", "Raiffeisen Bank International AG": "Raiffeisen",
