@@ -587,8 +587,12 @@ class Drafter:
                  if e.regime == "B" and e.issuer == entry.issuer and e.product_type == "securities_note"]
         if len(notes) <= 1:
             return [e.doc_id for e in notes if e.doc_id in self.store.docs]
-        first = _norm(doc.pages[0].text)
-        dated = [e for e in notes if e.issue_date and _norm(human_date(e.issue_date)) in first]
+        # The date that follows "securities note" (a registration document of the same date may also be cited).
+        opening = _norm(" ".join(p.text for p in doc.pages[:2]))
+        m = re.search(r"securities note[^.]{0,200}?(?:dated|approved on) (\d{1,2} [a-z]+ \d{4})", opening)
+        if not m:
+            return []
+        dated = [e for e in notes if e.issue_date and _norm(human_date(e.issue_date)) == m.group(1)]
         return [e.doc_id for e in dated if e.doc_id in self.store.docs]
 
     def cross_doc_tasks(self) -> list[Task]:
