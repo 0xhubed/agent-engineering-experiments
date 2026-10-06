@@ -251,17 +251,17 @@ def page_png(pdf: Path, page: int, cache_dir: Path, *, scale: float = 1.6) -> by
 CSS = """
 *{box-sizing:border-box} body{font:16px/1.45 -apple-system,system-ui,sans-serif;margin:0;padding:12px 16px 120px;
 color:#1a1a1a;background:#faf8f3;max-width:860px;margin:auto} h1{font-size:15px;margin:0 0 8px;color:#555}
-.q{font-size:18px;font-weight:600;margin:6px 0} .form{font-size:12px;color:#666;text-transform:uppercase;letter-spacing:.04em}
+.q{font-size:17px;font-weight:600;margin:4px 0 6px} .form{font-size:12px;color:#666;text-transform:uppercase;letter-spacing:.04em}
 .box{background:#fff;border:1px solid #ddd6c8;border-radius:8px;padding:10px 12px;margin:10px 0}
 label{display:block;font-size:13px;color:#555;margin-top:8px} input,select,textarea{width:100%;font:inherit;
 padding:8px;border:1px solid #bbb;border-radius:6px;background:#fff} textarea{min-height:64px}
 .bar{position:fixed;left:0;right:0;bottom:0;background:#fffdf8;border-top:1px solid #ddd6c8;padding:10px 16px;
 display:flex;gap:8px;max-width:860px;margin:auto} .bar button{flex:1;min-height:52px;font-size:17px;border:0;
 border-radius:8px;color:#fff} .ok{background:#2f6b3a}.no{background:#9b2c2c}.skip{background:#777}
-.page img{width:100%;border:1px solid #ccc} .text{white-space:pre-wrap;font-size:13px;max-height:260px;overflow:auto;
+.page img{width:100%;border:1px solid #ccc} .text{white-space:pre-wrap;font-size:14px;max-height:340px;overflow:auto;
 background:#fdfcf9;border:1px solid #eee;padding:8px} mark{background:#ffe27a} .meta{font-size:13px;color:#555}
 .prog{font-size:12px;color:#555} .prog b{color:#1a1a1a} .err{background:#fde8e8;border-color:#e0a0a0}
-details summary{cursor:pointer;color:#555;font-size:14px} a{color:#2b4f8a}
+details summary{cursor:pointer;color:#555;font-size:14px;padding:6px 0} .full{font-size:12px} a{color:#2b4f8a}
 """
 
 
@@ -269,15 +269,30 @@ def _esc(s) -> str:
     return html.escape(str(s if s is not None else ""))
 
 
-def _marked(text: str, quote_text: str | None) -> str:
-    escaped = _esc(text)
-    if not quote_text:
-        return escaped
-    words = [re.escape(_esc(w)) for w in quote_text.split()[:12]]
+def _tidy(text: str) -> str:
+    """Display only: markdown table rules and runs of blank cells are noise on a phone."""
+    text = re.sub(r"-{4,}", "—", text)
+    return re.sub(r"(\|\s*){3,}", "| ", text)
+
+
+def _find_quote(text: str, quote_text: str | None) -> tuple[int, int] | None:
+    words = re.findall(r"\w+", quote_text or "")[:12]
     if len(words) < 3:
-        return escaped
-    pattern = re.compile(r"\s+".join(words), re.IGNORECASE)
-    return pattern.sub(lambda m: f"<mark>{m.group(0)}</mark>", escaped, count=1)
+        return None
+    m = re.search(r"\W+".join(map(re.escape, words)), text, re.IGNORECASE)
+    return (m.start(), m.end()) if m else None
+
+
+def excerpt_html(text: str, quote_text: str | None, *, context: int = 450) -> tuple[str, bool]:
+    """The page text around the quote with the quote marked; (whole page from the top, False) if not found."""
+    text = _tidy(text)
+    span = _find_quote(text, quote_text)
+    if span is None:
+        return _esc(text[:2 * context]) + (" …" if len(text) > 2 * context else ""), False
+    a, b = span
+    lo, hi = max(0, a - context), min(len(text), b + context)
+    return ((" … " if lo else "") + _esc(text[lo:a]) + "<mark>" + _esc(text[a:b]) + "</mark>"
+            + _esc(text[b:hi]) + (" …" if hi < len(text) else "")), True
 
 
 def progress_html(review: Review) -> str:
@@ -297,11 +312,12 @@ def item_html(review: Review, draft: dict, error: str = "") -> str:
     regime_a = draft["regime"] == "A"
     question = draft["question"]
     if regime_a:
-        forms = [("by ISIN", render_question(question, f"the product with ISIN {review.isin(draft)}"))]
         desc = review.description(draft)
-        forms.append(("by description", render_question(question, desc)) if desc
-                     else ("by description", "— no unique description for this product; ISIN form only —"))
-        shown = "".join(f'<div class="form">{_esc(f)}</div><div class="q">{_esc(t)}</div>' for f, t in forms)
+        isin_q = render_question(question, f"the product with ISIN {review.isin(draft)}")
+        main = (render_question(question, desc) if desc
+                else isin_q + " (no unique description for this product: ISIN form only)")
+        shown = (f'<div class="form">by description</div><div class="q">{_esc(main)}</div>'
+                 f'<div class="meta">By ISIN: {_esc(isin_q)}</div>')
     else:
         shown = f'<div class="q">{_esc(question)}</div>'
     answer = draft["answer"]
@@ -321,11 +337,13 @@ def item_html(review: Review, draft: dict, error: str = "") -> str:
     for e in draft["evidence"]:
         doc = review.docs.get(e["doc_id"])
         text = doc.page(e["page"]).text if doc and 1 <= e["page"] <= doc.n_pages else "(page not in the parse)"
+        q_text = quotes.get((e["doc_id"], e["page"]))
+        snippet, found = excerpt_html(text, q_text)
         src = f"/page/{quote(e['doc_id'])}/{e['page']}.png"
-        pages.append(f'<div class="box page"><div class="meta">{_esc(e["doc_id"])} p.{e["page"]} · '
-                     f'quote: “{_esc(quotes.get((e["doc_id"], e["page"])))}”</div>'
-                     f'<details open><summary>Parsed text</summary><div class="text">'
-                     f'{_marked(text, quotes.get((e["doc_id"], e["page"])))}</div></details>'
+        pages.append(f'<div class="box page"><div class="meta">{_esc(e["doc_id"])} p.{e["page"]}'
+                     f'{"" if found else " · quote not located in the text"}</div>'
+                     f'<div class="text">{snippet}</div>'
+                     f'<details><summary>Whole page text</summary><div class="text full">{_esc(_tidy(text))}</div></details>'
                      f'<details><summary>Page image</summary><a href="{src}"><img loading="lazy" src="{src}" '
                      f'alt="page {e["page"]}"></a></details></div>')
     placeholder = "keep {product}" if regime_a else ""
@@ -338,7 +356,7 @@ def item_html(review: Review, draft: dict, error: str = "") -> str:
 <form id="decide" method="post" action="/decide">
 <input type="hidden" name="draft_id" value="{_esc(draft["draft_id"])}">
 <div class="box">
-<label>Answer</label><textarea name="answer">{_esc(answer_text)}</textarea>
+<label>Answer</label><textarea name="answer" rows="{max(2, min(8, len(answer_text) // 34 + 1))}">{_esc(answer_text)}</textarea>
 <label>Kind</label><select name="kind">{kind_options}</select>
 <details><summary>Edit question, type or evidence</summary>
 <label>Question template {_esc(placeholder)}</label><textarea name="question">{_esc(question)}</textarea>
