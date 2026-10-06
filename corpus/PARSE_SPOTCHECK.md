@@ -21,7 +21,7 @@ JB final terms p. 28 (issuer financials): every cell of both tables matches the 
 The rest are text inside graphics (BCV pp. 312, 319: an org chart and a contact page in the appended annual report),
 which the parser does not extract. None is plausible evidence; left as is.
 
-## Flat heading trees (fixed by `TREE_ID = outline-or-numbering-v1`)
+## Flat heading trees (fixed by `TREE_ID = outline-or-numbering-v2`)
 Docling gives every section header level 1, so our `ParsedDoc.tree` is flat (e.g. BNPP: 3,680 sibling sections).
 Only 3/9 prospectuses were thought to carry a usable PDF outline (BCV 227 entries / 5 levels; RBI SSP 2025SN and 2026RD, 179 / 3);
 no termsheet does. No arm's retrieval depends on our tree (PageIndex builds its own; RAPTOR clusters chunks; vector
@@ -31,7 +31,7 @@ relevel docling headings by their numbering ("4.2.1" -> level 3; BNPP: 587 numbe
 
 **Fix (2026-10-06).** The tree now comes from the PDF outline when it has ≥ 10 entries (4/9 prospectuses — JB's
 Registration Document II also has one — and 14/84 FinanceBench filings; no termsheet), otherwise from docling's headings
-re-levelled by numbering scheme (`parse.relevel`: Part/Annex > Roman > ALL CAPS > Item/Article/Section > A. >
+re-levelled by numbering scheme (`parse.relevel`: Part/Annex > Roman (Parts move below Roman when a Roman heading comes first) > ALL CAPS > Item/Article/Section > A. >
 4.2.1 (one level per component) > § > Note > (a); a plain heading sits below the last numbered one). Cached text
 is reused; only the tree is rebuilt. Measured against the outlines where both exist (docling headings matched to
 outline entries by title and page ±1; does each step between consecutive headings go up/down/stay as in the outline?):

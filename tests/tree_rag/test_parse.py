@@ -132,3 +132,11 @@ def test_tree_only_change_rebuilds_tree_from_cached_headings(tmp_path, monkeypat
     again = load_or_parse(pdf, "d", tmp_path / "c", parser=fake_parser)
     assert calls == ["d"] and [n.level for n in again.tree] == [1, 2]   # no re-parse
     assert json.loads((tmp_path / "c" / "d.json").read_text())["tree_id"] == "next"
+
+
+def test_parts_nest_inside_roman_sections_when_roman_comes_first():
+    from aex.experiments.tree_rag.parse import relevel
+    jb = [("VI. TERMS AND CONDITIONS", 1, 1), ("Part A: Product Specific Conditions", 1, 1), ("1. Issue", 1, 2)]
+    assert [lvl for _, lvl, _ in relevel(jb)] == [1, 2, 3]
+    tenk = [("PART I", 1, 1), ("Item 1. Business", 1, 2), ("PART II", 1, 9), ("Item 5. Market", 1, 9)]
+    assert [lvl for _, lvl, _ in relevel(tenk)] == [1, 2, 1, 2]

@@ -23,7 +23,7 @@ Heading = tuple[str, int, int]
 PARSER_ID = "docling-no-ocr-v1"
 # Identifies how the heading tree is built from docling's headings (which all come out at level 1) and the
 # PDF outline. A tree-only change: cached text is reused and only the tree is rebuilt.
-TREE_ID = "outline-or-numbering-v1"
+TREE_ID = "outline-or-numbering-v2"
 MIN_OUTLINE_ENTRIES = 10
 MAX_LEVEL = 6
 
@@ -76,10 +76,16 @@ def heading_scheme(title: str) -> tuple[str, int] | None:
 
 
 def relevel(headings: list[Heading]) -> list[Heading]:
-    """Levels from numbering: schemes ranked by _SCHEMES among those the document uses; a plain heading
-    sits one level below the last numbered one."""
+    """Levels from numbering: schemes ranked by _SCHEMES among those the document uses (Parts move below
+    Roman sections when a Roman heading comes first); a plain heading sits one level below the last
+    numbered one."""
     schemes = [heading_scheme(title) for title, _, _ in headings]
     used = [name for name, _ in _SCHEMES if any(s and s[0] == name for s in schemes)]
+    first = {name: next(i for i, s in enumerate(schemes) if s and s[0] == name) for name in used}
+    if "part" in first and "roman" in first and first["roman"] < first["part"]:
+        # "VI. Terms and Conditions … Part A": this document's parts sit inside its Roman sections.
+        used.remove("part")
+        used.insert(used.index("roman") + 1, "part")
     rank = {name: i + 1 for i, name in enumerate(used)}
     out: list[Heading] = []
     last = 0
