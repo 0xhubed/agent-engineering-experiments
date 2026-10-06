@@ -5,8 +5,8 @@ completes ({sn_id}).
 Write up to {n} question(s) whose answer needs BOTH documents: typically the final terms say which option,
 provision or value applies to this product, and the securities note says what that means or how it works.
 Refer to the product only as {{product}} (a placeholder that will be replaced by an ISIN or a description).
-Each question must have exactly one correct answer, short enough to check (prefer a value, date, name or
-one sentence). Questions in English.
+Each question must ask ONE thing (never two questions joined by "and") and have exactly one correct
+answer, short enough to check (prefer a value, date, name or one sentence). Questions in English.
 
 evidence: list of {{"doc_id": ..., "page": ...}} with at least one page from each document.
 quotes: one verbatim quote (5-30 words) per document, copied exactly.
