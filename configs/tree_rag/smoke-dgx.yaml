@@ -1,0 +1,28 @@
+# Live smoke run: oracle arm on the fixture questions against Qwen3.8-27B on hubed-dgx.
+# Serving: serving/gb10/qwen38-27b.sh. Thinking on at medium effort (decided 2026-10-05).
+seed: 17
+gold: tests/tree_rag/fixtures/gold_fixture.jsonl
+parsed_dir: tests/tree_rag/fixtures/parsed
+checkpoint: runs/smoke-dgx.sqlite
+splits: [dev, test]
+arms: [oracle]
+navigators: [qwen3.8-27b]
+answerers: [qwen3.8-27b]
+judge: qwen3.8-27b-judge
+max_answer_tokens: 8192        # reasoning counts against this; truncation is recorded as an error, never scored
+models:
+  qwen3.8-27b:
+    kind: openai
+    base_url: http://hubed-dgx:8000/v1
+    model: qwen3.8-27b
+    revision: unsloth/Qwen3.8-27B-NVFP4@7d6f8d4d72f56b92b3cdbf22f156b90e1bab0108
+    local: true
+    extra_body: {chat_template_kwargs: {reasoning_effort: medium}}
+  qwen3.8-27b-judge:            # same server; the judge replies with one word, so thinking is off
+    kind: openai
+    base_url: http://hubed-dgx:8000/v1
+    model: qwen3.8-27b
+    revision: unsloth/Qwen3.8-27B-NVFP4@7d6f8d4d72f56b92b3cdbf22f156b90e1bab0108
+    local: true
+    extra_body: {chat_template_kwargs: {enable_thinking: false}}
+prices: {}

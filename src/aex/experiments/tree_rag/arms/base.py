@@ -19,8 +19,21 @@ class IndexStats:
 
 
 class Store:
-    def __init__(self, docs: Iterable[ParsedDoc]) -> None:
+    def __init__(self, docs: Iterable[ParsedDoc], groups: dict[str, str] | None = None) -> None:
         self.docs: dict[str, ParsedDoc] = {d.doc_id: d for d in docs}
+        # doc_id -> corpus name (from corpus manifests); retrieval never crosses corpora in phase 1
+        self.groups: dict[str, str] = dict(groups or {})
+
+    def scope(self, q: Question, mode: str = "corpus") -> list[str]:
+        """Documents an arm may search for q: its corpus (default) or only the question's own documents."""
+        if mode == "question_docs":
+            return list(q.doc_ids)
+        if mode != "corpus":
+            raise ValueError(f"unknown scope {mode!r}")
+        if not self.groups:
+            return sorted(self.docs)
+        wanted = {self.groups.get(d) for d in q.doc_ids}
+        return sorted(d for d in self.docs if self.groups.get(d) in wanted)
 
     def get(self, doc_id: str) -> ParsedDoc:
         if doc_id not in self.docs:
