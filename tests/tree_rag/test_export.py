@@ -119,3 +119,18 @@ def test_financebench_is_redacted_by_default_other_datasets_are_not(tmp_path):
     _export(tmp_path, rows, qs)
     shard = json.loads((tmp_path / "out" / "explorer" / "fixture-0.json").read_text())
     assert not any(q.get("redacted") for q in shard["questions"])
+
+
+def test_rows_carry_the_question_form(tmp_path):
+    from dataclasses import replace
+    rows, qs = _rows(tmp_path)
+    assert all(r["form"] is None for r in rows)
+    data = json.loads(_export(tmp_path, rows, qs).read_text())
+    assert all(r["form"] is None for r in data["rows"])
+    old = [{k: v for k, v in r.items() if k != "form"} for r in rows]            # pre-form checkpoint rows
+    tagged = [r | {"form": "description"} for r in rows]
+    for variant in (old, tagged):
+        jsonschema.validate(json.loads(_export(tmp_path, variant, qs).read_text()), SCHEMA)
+    q = replace(qs[0], pair_id="p", form="isin")
+    from aex.experiments.tree_rag.run import _base_row
+    assert _base_row(q, "oracle", "none", "m")["form"] == "isin"

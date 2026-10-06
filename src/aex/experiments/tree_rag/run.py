@@ -106,7 +106,7 @@ def _add(a: float | None, b: float | None) -> float | None:
 
 
 def _base_row(q: Question, arm_name: str, navigator: str, answerer: str) -> dict:
-    return {"qid": q.qid, "dataset": q.dataset, "regime": q.regime, "qtype": q.qtype,
+    return {"qid": q.qid, "dataset": q.dataset, "regime": q.regime, "qtype": q.qtype, "form": q.form,
             "arm": arm_name, "navigator": navigator, "answerer": answerer}
 
 

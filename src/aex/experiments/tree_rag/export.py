@@ -25,7 +25,7 @@ ARM_LABELS = {
     "vec_tree": "Vectors → tree", "long_context": "Whole document",
     "pageindex_native": "PageIndex (its own answer)",
 }
-RUN_FIELDS = ("qid", "dataset", "regime", "qtype", "arm", "navigator", "answerer", "correct", "judge",
+RUN_FIELDS = ("qid", "dataset", "regime", "qtype", "form", "arm", "navigator", "answerer", "correct", "judge",
               "evidence_recall", "evidence_precision", "wrong_doc", "latency_s", "llm_calls_sequential",
               "tokens_query", "tokens_index_amortised", "cost_usd", "gpu_s", "failure")
 _SCHEMA = json.loads((Path(__file__).parent / "schema" / "tree-rag-runs.v1.schema.json").read_text())
@@ -118,7 +118,7 @@ def export(rows: list[dict], *, questions: list[Question], store: Store, models:
         "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "arms": [{"id": a, "label": ARM_LABELS.get(a, a), "family": ARMS[a].family} for a in arm_ids],
         "models": _model_meta(rows, models, judge),
-        "rows": [{k: r[k] for k in RUN_FIELDS} for r in rows],
+        "rows": [{k: r.get(k) if k == "form" else r[k] for k in RUN_FIELDS} for r in rows],   # form: absent in older checkpoints
     }
     try:
         jsonschema.validate(runs, _SCHEMA)
