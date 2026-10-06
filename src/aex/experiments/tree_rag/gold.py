@@ -58,6 +58,8 @@ def load_questions(path: str | Path, *, seed: int, dev_fraction: float = 0.2) ->
             doc_ids=tuple(record["doc_ids"]),
             gold=GoldAnswer(record["gold"]["kind"], record["gold"]["value"]),
             evidence=tuple((e["doc_id"], e["page"]) for e in record["evidence"]),
-            split=assign_split(record["qid"], seed, dev_fraction),
+            # Both forms of a regime-A pair land in the same split, or dev tuning would see test answers.
+            split=assign_split(record.get("pair_id", record["qid"]), seed, dev_fraction),
+            pair_id=record.get("pair_id"), form=record.get("form"),
         ))
     return questions

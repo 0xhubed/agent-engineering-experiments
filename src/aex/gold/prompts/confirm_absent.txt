@@ -1,0 +1,12 @@
+Does the document text below answer this question? Read carefully: the answer may be phrased
+differently from the question.
+
+Question: {question}
+
+Reply with one JSON object only:
+{{"answered": true, "page": 12, "quote": "verbatim words from the page"}}
+or
+{{"answered": false, "page": null, "quote": null}}
+
+Document text ({scope}):
+{pages}
