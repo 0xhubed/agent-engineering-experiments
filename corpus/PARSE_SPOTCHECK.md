@@ -21,10 +21,25 @@ JB final terms p. 28 (issuer financials): every cell of both tables matches the 
 The rest are text inside graphics (BCV pp. 312, 319: an org chart and a contact page in the appended annual report),
 which the parser does not extract. None is plausible evidence; left as is.
 
-## Known issue: flat heading trees (deferred, no effect on results)
+## Flat heading trees (fixed by `TREE_ID = outline-or-numbering-v1`)
 Docling gives every section header level 1, so our `ParsedDoc.tree` is flat (e.g. BNPP: 3,680 sibling sections).
-Only 3/9 prospectuses carry a usable PDF outline (BCV 227 entries / 5 levels; RBI SSP 2025SN and 2026RD, 179 / 3);
+Only 3/9 prospectuses were thought to carry a usable PDF outline (BCV 227 entries / 5 levels; RBI SSP 2025SN and 2026RD, 179 / 3);
 no termsheet does. No arm's retrieval depends on our tree (PageIndex builds its own; RAPTOR clusters chunks; vector
 arms ignore it; vec_tree's document card uses titles only). It feeds the signature visual and the mapping of
 PageIndex reads onto sections. Fix before publishing: build the tree from the PDF outline when present, otherwise
 relevel docling headings by their numbering ("4.2.1" -> level 3; BNPP: 587 numbered headings).
+
+**Fix (2026-10-06).** The tree now comes from the PDF outline when it has ≥ 10 entries (4/9 prospectuses — JB's
+Registration Document II also has one — and 14/84 FinanceBench filings; no termsheet), otherwise from docling's headings
+re-levelled by numbering scheme (`parse.relevel`: Part/Annex > Roman > ALL CAPS > Item/Article/Section > A. >
+4.2.1 (one level per component) > § > Note > (a); a plain heading sits below the last numbered one). Cached text
+is reused; only the tree is rebuilt. Measured against the outlines where both exist (docling headings matched to
+outline entries by title and page ±1; does each step between consecutive headings go up/down/stay as in the outline?):
+
+| | steps where the outline changes level | steps where it stays |
+|---|---|---|
+| prospectuses (4 docs, 632 steps) | 77% right (flat tree: 0%) | 96% (flat: 100%) |
+| FinanceBench filings (13 parsed so far, 1,269 steps) | 43% right (flat: 0%) | 92% (flat: 100%) |
+
+10-K headings are mostly unnumbered, so their trees stay rough; FinanceBench is the claim check, where PageIndex
+builds its own trees anyway.
