@@ -1,0 +1,20 @@
+# Retry pass for tasks that timed out under 4-way concurrency: 2 workers, 900 s per call.
+# Gold drafting (plan 1b Task 6): python -m aex.gold.draft configs/gold/draft.yaml
+# Serving: serving/gb10/qwen38-27b.sh on hubed-dgx (max-num-seqs 4 -> workers 4).
+seed: 17
+manifests: [corpus/termsheets/manifest.csv, corpus/prospectuses/manifest.csv]
+parsed_dir: data/parsed
+out_dir: gold/drafts
+workers: 2
+max_tokens: 12000
+prospectus_windows: 14
+model: qwen3.8-27b
+models:
+  qwen3.8-27b:
+    kind: openai
+    base_url: http://hubed-dgx:8000/v1
+    model: qwen3.8-27b
+    revision: unsloth/Qwen3.8-27B-NVFP4@7d6f8d4d72f56b92b3cdbf22f156b90e1bab0108
+    local: true
+    timeout_s: 900
+    extra_body: {chat_template_kwargs: {reasoning_effort: medium}}

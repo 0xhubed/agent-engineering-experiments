@@ -55,7 +55,8 @@ def build_client(model_id: str, spec: dict) -> ChatClient:
     if spec["kind"] == "openai":
         api_key = os.environ.get(spec.get("api_key_env", ""), "EMPTY")
         return OpenAICompatClient(spec["base_url"], spec["model"], api_key=api_key,
-                                  local=spec.get("local", True), extra_body=spec.get("extra_body"))
+                                  local=spec.get("local", True), extra_body=spec.get("extra_body"),
+                                  timeout_s=spec.get("timeout_s", 300.0))
     raise ValueError(f"model {model_id!r}: unknown kind {spec['kind']!r}")
 
 
