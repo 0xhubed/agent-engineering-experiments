@@ -8,3 +8,6 @@ runs/*/raw/
 *.pdf
 .env
 site-fixture/
+
+# Regenerated from the pinned FinanceBench source (CC-BY-NC); never committed
+gold/financebench.jsonl
