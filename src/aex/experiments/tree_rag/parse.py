@@ -14,6 +14,12 @@ from aex.experiments.tree_rag.types import Page, ParsedDoc, TreeNode
 
 Heading = tuple[str, int, int]
 
+# Identifies the parse configuration; cached parses from any other configuration are ignored.
+# OCR is off: the corpus PDFs are born-digital, and on a 31-page termsheet OCR took 3.5x longer for the
+# same text (20,751 vs 20,746 words; median per-page word-sequence similarity 1.000). Pages without a
+# text layer then come out empty and are reported as the parse_failure class, never silently filled.
+PARSER_ID = "docling-no-ocr-v1"
+
 
 def build_tree(headings: list[Heading], n_pages: int, doc_title: str) -> tuple[TreeNode, ...]:
     if not headings:
@@ -46,11 +52,15 @@ def file_sha256(path: str | Path) -> str:
 def parse_pdf(path: str | Path, doc_id: str) -> ParsedDoc:
     """Docling adapter. If docling's API differs from this, adapt the adapter only —
     the build_tree contract and ParsedDoc shape are what the rest of the code relies on."""
-    from docling.document_converter import DocumentConverter
+    from docling.datamodel.base_models import InputFormat
+    from docling.datamodel.pipeline_options import PdfPipelineOptions
+    from docling.document_converter import DocumentConverter, PdfFormatOption
     from docling_core.types.doc import SectionHeaderItem, TableItem, TextItem, TitleItem
 
     path = Path(path)
-    document = DocumentConverter().convert(str(path)).document
+    converter = DocumentConverter(format_options={
+        InputFormat.PDF: PdfFormatOption(pipeline_options=PdfPipelineOptions(do_ocr=False))})
+    document = converter.convert(str(path)).document
     n_pages = len(document.pages)
     texts: dict[int, list[str]] = {n: [] for n in range(1, n_pages + 1)}
     headings: list[Heading] = []
@@ -80,10 +90,11 @@ def load_or_parse(pdf_path: str | Path, doc_id: str, cache_dir: str | Path, *,
     cache_file = cache_dir / f"{doc_id}.json"
     current_sha = file_sha256(pdf_path)
     if cache_file.exists():
-        cached = ParsedDoc.from_dict(json.loads(cache_file.read_text()))
-        if cached.sha256 == current_sha:
+        data = json.loads(cache_file.read_text())
+        cached = ParsedDoc.from_dict(data)
+        if cached.sha256 == current_sha and data.get("parser") == PARSER_ID:
             return cached
     doc = parser(pdf_path, doc_id)
     cache_dir.mkdir(parents=True, exist_ok=True)
-    cache_file.write_text(json.dumps(doc.to_dict()))
+    cache_file.write_text(json.dumps(doc.to_dict() | {"parser": PARSER_ID}))
     return doc

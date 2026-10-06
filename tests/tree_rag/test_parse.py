@@ -77,3 +77,26 @@ def test_parse_pdf_on_generated_document(tmp_path):
     assert "60%" in doc.page(2).text
     assert len(doc.tree) >= 1
     assert doc.sha256 == file_sha256(path)
+
+
+def test_cache_is_tied_to_the_parser_version(tmp_path, monkeypatch):
+    import aex.experiments.tree_rag.parse as parse
+    pdf = tmp_path / "doc.pdf"
+    pdf.write_bytes(b"%PDF-1.4 same bytes")
+    calls = []
+
+    def fake_parser(path, doc_id):
+        calls.append(doc_id)
+        return ParsedDoc(doc_id, "T", file_sha256(path), (Page(1, "text"),), ())
+
+    cache = tmp_path / "cache"
+    load_or_parse(pdf, "d1", cache, parser=fake_parser)
+    assert json.loads((cache / "d1.json").read_text())["parser"] == parse.PARSER_ID
+    monkeypatch.setattr(parse, "PARSER_ID", "something-else")
+    load_or_parse(pdf, "d1", cache, parser=fake_parser)
+    assert calls == ["d1", "d1"]                      # same PDF, different parser config -> reparse
+
+
+def test_parser_id_says_ocr_is_off():
+    from aex.experiments.tree_rag.parse import PARSER_ID
+    assert "no-ocr" in PARSER_ID
