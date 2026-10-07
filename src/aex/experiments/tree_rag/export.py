@@ -25,10 +25,12 @@ ARM_LABELS = {
     "vec_tree": "Vectors → tree", "long_context": "Whole document",
     "pageindex_native": "PageIndex (its own answer)",
 }
-RUN_FIELDS = ("qid", "dataset", "regime", "qtype", "arm", "navigator", "answerer", "correct", "judge",
+RUN_FIELDS = ("qid", "dataset", "regime", "qtype", "form", "arm", "navigator", "answerer", "correct", "judge",
               "evidence_recall", "evidence_precision", "wrong_doc", "latency_s", "llm_calls_sequential",
               "tokens_query", "tokens_index_amortised", "cost_usd", "gpu_s", "failure")
 _SCHEMA = json.loads((Path(__file__).parent / "schema" / "tree-rag-runs.v1.schema.json").read_text())
+# Trace keys holding model prose (an arm's own answer); dropped from redacted datasets' shards.
+_TRACE_TEXT_KEYS = ("native_answer", "sdk_answer")
 
 
 class ExportError(ValueError):
@@ -63,7 +65,18 @@ def _model_meta(rows: list[dict], models: dict[str, dict], judge: str | None) ->
              "roles": [role for role in order if role in roles[mid]]} for mid in sorted(roles)]
 
 
-def _shard_entries(rows, questions, store, snippet_chars):
+def _redact(entry: dict) -> dict:
+    """Withhold a licensed dataset's text: question, gold, answers and snippets (spec §5.3)."""
+    entry |= {"question": f"{entry['dataset']} question {entry['qid']}",
+              "gold": {"kind": entry["gold"]["kind"], "value": None}, "redacted": True}
+    for r in entry["results"]:
+        r["answer"] = None
+        r["evidence"] = [{**e, "snippet": ""} for e in r["evidence"]]
+        r["trace"] = {k: v for k, v in r["trace"].items() if k not in _TRACE_TEXT_KEYS}
+    return entry
+
+
+def _shard_entries(rows, questions, store, snippet_chars, redact_datasets=frozenset()):
     by_qid: dict[str, list[dict]] = defaultdict(list)
     for r in rows:
         by_qid[r["qid"]].append(r)
@@ -84,12 +97,17 @@ def _shard_entries(rows, questions, store, snippet_chars):
                         "docs": [{"doc_id": d.doc_id, "title": d.title, "n_pages": d.n_pages,
                                   "tree": [asdict(n) for n in d.tree]} for d in docs],
                         "results": results})
+        if q.dataset in redact_datasets:
+            _redact(entries[-1])
     return entries
 
 
 def export(rows: list[dict], *, questions: list[Question], store: Store, models: dict[str, dict],
            judge: str | None, manifest_hash: str, data_version: str, out_dir: str | Path, shard_size: int = 50,
-           snippet_chars: int = 300, allow_errors: bool = False) -> Path:
+           snippet_chars: int = 300, allow_errors: bool = False,
+           redact_datasets: frozenset[str] | set[str] = frozenset({"financebench"})) -> Path:
+    """`redact_datasets`: datasets whose text may not appear in the public explorer. FinanceBench is
+    redacted until Daniel signs off on showing it (decision D3); aggregates are unaffected."""
     errors = [r for r in rows if r.get("failure") == "error"]
     if errors and not allow_errors:
         raise ExportError(f"{len(errors)} rows have failure='error'; rerun them or pass allow_errors")
@@ -100,7 +118,7 @@ def export(rows: list[dict], *, questions: list[Question], store: Store, models:
         "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "arms": [{"id": a, "label": ARM_LABELS.get(a, a), "family": ARMS[a].family} for a in arm_ids],
         "models": _model_meta(rows, models, judge),
-        "rows": [{k: r[k] for k in RUN_FIELDS} for r in rows],
+        "rows": [{k: r.get(k) if k == "form" else r[k] for k in RUN_FIELDS} for r in rows],   # form: absent in older checkpoints
     }
     try:
         jsonschema.validate(runs, _SCHEMA)
@@ -113,7 +131,7 @@ def export(rows: list[dict], *, questions: list[Question], store: Store, models:
     explorer_dir = out_dir / "explorer"
     explorer_dir.mkdir(exist_ok=True)
     by_dataset: dict[str, list[dict]] = defaultdict(list)
-    for entry in _shard_entries(rows, questions, store, snippet_chars):
+    for entry in _shard_entries(rows, questions, store, snippet_chars, frozenset(redact_datasets)):
         by_dataset[entry["dataset"]].append(entry)
     shards = []
     for dataset, entries in sorted(by_dataset.items()):

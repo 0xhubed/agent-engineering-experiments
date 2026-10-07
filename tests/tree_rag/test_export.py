@@ -100,3 +100,37 @@ def test_sharding(tmp_path):
     index = json.loads((tmp_path / "out" / "explorer" / "index.json").read_text())
     assert [len(s["qids"]) for s in index["shards"]] == [2, 1]
     assert {s["file"] for s in index["shards"]} == {"fixture-0.json", "fixture-1.json"}
+
+
+def test_redacted_datasets_withhold_text_but_keep_rows(tmp_path):
+    rows, qs = _rows(tmp_path)
+    runs_path = _export(tmp_path, rows, qs, redact_datasets={"fixture"})
+    assert len(json.loads(runs_path.read_text())["rows"]) == len(rows)
+    shard = json.loads((tmp_path / "out" / "explorer" / "fixture-0.json").read_text())
+    for q in shard["questions"]:
+        assert q["redacted"] and q["question"] == f"fixture question {q['qid']}" and q["gold"]["value"] is None
+        assert all(r["answer"] is None and all(e["snippet"] == "" for e in r["evidence"]) for r in q["results"])
+    text = json.dumps(shard)
+    assert all(qq.question not in text for qq in qs)
+
+
+def test_financebench_is_redacted_by_default_other_datasets_are_not(tmp_path):
+    rows, qs = _rows(tmp_path)
+    _export(tmp_path, rows, qs)
+    shard = json.loads((tmp_path / "out" / "explorer" / "fixture-0.json").read_text())
+    assert not any(q.get("redacted") for q in shard["questions"])
+
+
+def test_rows_carry_the_question_form(tmp_path):
+    from dataclasses import replace
+    rows, qs = _rows(tmp_path)
+    assert all(r["form"] is None for r in rows)
+    data = json.loads(_export(tmp_path, rows, qs).read_text())
+    assert all(r["form"] is None for r in data["rows"])
+    old = [{k: v for k, v in r.items() if k != "form"} for r in rows]            # pre-form checkpoint rows
+    tagged = [r | {"form": "description"} for r in rows]
+    for variant in (old, tagged):
+        jsonschema.validate(json.loads(_export(tmp_path, variant, qs).read_text()), SCHEMA)
+    q = replace(qs[0], pair_id="p", form="isin")
+    from aex.experiments.tree_rag.run import _base_row
+    assert _base_row(q, "oracle", "none", "m")["form"] == "isin"

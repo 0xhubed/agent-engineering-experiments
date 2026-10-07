@@ -1,0 +1,19 @@
+You are drafting test questions for a retrieval benchmark over financial documents.
+
+Document: {doc_label}
+The pages below are pages {first}-{last} of {n_pages}.
+
+Write up to {n} question(s) that a reader of this kind of document could reasonably ask but that this
+document does NOT answer anywhere, e.g. a term that similar products have but this one lacks, or a detail
+such documents usually leave out. The correct answer is "not stated". Avoid questions that are absurd or
+obviously out of scope (no weather, no share prices after issue), and questions whose answer can be
+calculated from values the document does state.
+{reference_rule}{focus}
+For each question also give 2-5 search keywords a checker can use to look for the answer in the full
+document. Questions in English.
+
+Reply with one JSON object only:
+{{"questions": [{{"question": "...", "keywords": ["...", "..."], "why_absent": "..."}}]}}
+
+Pages:
+{pages}

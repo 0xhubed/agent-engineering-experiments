@@ -71,3 +71,33 @@ def test_parsed_doc_roundtrip():
                     (TreeNode("n1", None, "Root", 1, 2, 1),))
     again = ParsedDoc.from_dict(json.loads(json.dumps(doc.to_dict())))
     assert again == doc and again.n_pages == 2 and again.page(2).text == "b"
+
+
+def _pair_line(qid, form, pair_id="p-0001"):
+    return json.dumps({"qid": qid, "dataset": "termsheets", "regime": "A", "qtype": "lookup",
+                       "question": f"What is the barrier of {qid}?", "doc_ids": ["d"],
+                       "gold": {"kind": "numeric", "value": "60%"}, "evidence": [{"doc_id": "d", "page": 1}],
+                       "verified_by": "daniel", "pair_id": pair_id, "form": form})
+
+
+def test_pair_forms_share_a_split_and_are_typed(tmp_path):
+    p = tmp_path / "g.jsonl"
+    lines = [_pair_line(f"q-{i}-isin", "isin", f"p-{i}") + "\n" + _pair_line(f"q-{i}-desc", "description", f"p-{i}")
+             for i in range(40)]
+    p.write_text("\n".join(lines) + "\n")
+    qs = load_questions(p, seed=17)
+    by_pair = {}
+    for q in qs:
+        by_pair.setdefault(q.pair_id, set()).add(q.split)
+    assert all(len(s) == 1 for s in by_pair.values())
+    assert {q.form for q in qs} == {"isin", "description"}
+    assert len({next(iter(s)) for s in by_pair.values()}) == 2   # both splits occur
+
+
+def test_pair_id_requires_form(tmp_path):
+    p = tmp_path / "g.jsonl"
+    record = json.loads(_pair_line("q-1", "isin"))
+    del record["form"]
+    p.write_text(json.dumps(record) + "\n")
+    with pytest.raises(GoldError):
+        load_questions(p, seed=17)

@@ -1,0 +1,13 @@
+Below are pages of a product's final terms. Final terms only complete a base prospectus / securities note:
+many provisions (definitions, fallbacks, adjustment and disruption rules, calculation methods, the
+meaning of an elected option) are set out only in the securities note.
+
+List up to 4 provisions these pages rely on that are defined or explained in the securities note rather
+than here. For each, give the exact wording used here and 3-6 search keywords to find it in the
+securities note.
+
+Reply with one JSON object only:
+{{"provisions": [{{"wording": "...", "keywords": ["...", "..."], "page": 4}}]}}
+
+Final terms pages:
+{pages}

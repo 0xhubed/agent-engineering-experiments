@@ -26,6 +26,7 @@
         "qid": {"type": "string"}, "dataset": {"type": "string"},
         "regime": {"enum": ["A", "B", "claim"]},
         "qtype": {"enum": ["lookup", "table", "computation", "cross_doc", "disambiguation", "unanswerable"]},
+        "form": {"enum": ["isin", "description", null]},
         "arm": {"type": "string"}, "navigator": {"type": "string"}, "answerer": {"type": "string"},
         "correct": {"type": ["boolean", "null"]},
         "judge": {"type": ["string", "null"]},

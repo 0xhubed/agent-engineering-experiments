@@ -66,6 +66,8 @@ class Question:
     gold: GoldAnswer
     evidence: tuple[tuple[str, int], ...]
     split: Literal["dev", "test"]
+    pair_id: str | None = None                          # regime A: ISIN and description forms share it
+    form: Literal["isin", "description"] | None = None
 
 
 @dataclass(frozen=True)

@@ -1,0 +1,29 @@
+Below are the first pages of a structured product's final terms ({doc_id}, {n_pages} pages in total).
+Extract the product's key terms. For each field give the value as stated, the page it is on, and a
+short verbatim quote (5-25 words, copied exactly from that page) that contains the value. Use null for
+value, page and quote when these pages do not state the field. Do not compute or infer values.
+
+Fields:
+- underlyings: the underlying share(s) or index(es); value is a list of plain company or index names
+  (e.g. "Bayer AG", "Swiss Re AG", "EURO STOXX 50"), without share-class words such as "Namens-Stammaktie"
+- currency: settlement currency (ISO code)
+- denomination: denomination / nominal amount per product
+- issue_price: issue price (e.g. "100%")
+- issue_size: aggregate issue size
+- coupon_rate: coupon or interest rate per annum (e.g. "7.00%")
+- barrier_level: barrier as % of the initial level (for several underlyings, the common percentage)
+- strike_level: strike as % of the initial level
+- autocall_trigger_level: early-redemption / autocall trigger as % of the initial level
+- initial_fixing_date
+- issue_date: issue / payment date
+- final_fixing_date: final fixing / valuation date
+- maturity_date: redemption / maturity / repayment date
+- listing: exchange where the product is listed, or "none" if stated as not listed
+
+Dates as YYYY-MM-DD. Percentages with a % sign.
+
+Reply with one JSON object only, no prose:
+{{"underlyings": {{"value": ["..."], "page": 1, "quote": "..."}}, "currency": {{"value": "CHF", "page": 1, "quote": "..."}}, ...}}
+
+Pages:
+{pages}

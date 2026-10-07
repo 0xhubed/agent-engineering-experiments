@@ -1,0 +1,826 @@
+{
+ "db-de000db9vac6": {
+  "description": "the Deutsche Bank express certificate on Bayer AG maturing in January 2028",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings",
+   "maturity_date"
+  ],
+  "siblings": [
+   "db-de000db9vas2"
+  ]
+ },
+ "db-de000db9vas2": {
+  "description": "the Deutsche Bank express certificate on Bayer AG maturing in February 2028",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings",
+   "maturity_date"
+  ],
+  "siblings": [
+   "db-de000db9vac6"
+  ]
+ },
+ "db-de000db9vej3": {
+  "description": "the Deutsche Bank express certificate on Volkswagen AG maturing in June 2028",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings",
+   "maturity_date"
+  ],
+  "siblings": [
+   "db-de000db9van3"
+  ]
+ },
+ "db-de000db9u9v0": {
+  "description": "the Deutsche Bank express certificate on Dr. Ing. h.c. F. Porsche AG maturing in January 2028",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings",
+   "maturity_date"
+  ],
+  "siblings": [
+   "db-de000db9vju9"
+  ]
+ },
+ "db-de000db9vfl6": {
+  "description": "the Deutsche Bank express certificate on BMW AG maturing in August 2028",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings",
+   "maturity_date"
+  ],
+  "siblings": [
+   "db-de000db9vdw8",
+   "db-de000db9vjn4",
+   "db-de000db9vnt3"
+  ]
+ },
+ "db-de000db9vfa9": {
+  "description": "the Deutsche Bank express certificate on Puma SE maturing in July 2028",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings",
+   "maturity_date"
+  ],
+  "siblings": [
+   "db-de000db9vfq5"
+  ]
+ },
+ "db-de000db9vfq5": {
+  "description": "the Deutsche Bank express certificate on Puma SE maturing in August 2028",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings",
+   "maturity_date"
+  ],
+  "siblings": [
+   "db-de000db9vfa9"
+  ]
+ },
+ "db-de000db9vjd5": {
+  "description": "the Deutsche Bank express certificate on Mercedes-Benz Group AG",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings"
+  ],
+  "siblings": []
+ },
+ "db-de000db9vdw8": {
+  "description": "the Deutsche Bank express certificate on BMW AG maturing in May 2028",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings",
+   "maturity_date"
+  ],
+  "siblings": [
+   "db-de000db9vfl6",
+   "db-de000db9vjn4",
+   "db-de000db9vnt3"
+  ]
+ },
+ "db-de000db9vjn4": {
+  "description": "the Deutsche Bank express certificate on BMW AG maturing in September 2028",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings",
+   "maturity_date"
+  ],
+  "siblings": [
+   "db-de000db9vdw8",
+   "db-de000db9vfl6",
+   "db-de000db9vnt3"
+  ]
+ },
+ "db-de000db9vkj0": {
+  "description": "the Deutsche Bank express certificate on Merck KGaA maturing in October 2028",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings",
+   "maturity_date"
+  ],
+  "siblings": [
+   "db-de000db9vpj9"
+  ]
+ },
+ "db-de000db9vlk6": {
+  "description": "the Deutsche Bank express certificate on TotalEnergies SE",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings"
+  ],
+  "siblings": []
+ },
+ "db-de000db9vnt3": {
+  "description": "the Deutsche Bank express certificate on BMW AG maturing in February 2029",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings",
+   "maturity_date"
+  ],
+  "siblings": [
+   "db-de000db9vdw8",
+   "db-de000db9vfl6",
+   "db-de000db9vjn4"
+  ]
+ },
+ "db-de000db9van3": {
+  "description": "the Deutsche Bank express certificate on Volkswagen AG maturing in February 2028",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings",
+   "maturity_date"
+  ],
+  "siblings": [
+   "db-de000db9vej3"
+  ]
+ },
+ "db-de000db9vph3": {
+  "description": "the Deutsche Bank express certificate on LVMH Moet Hennessy Louis Vuitton SE",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings"
+  ],
+  "siblings": []
+ },
+ "db-de000db9vpj9": {
+  "description": "the Deutsche Bank express certificate on Merck KGaA maturing in February 2029",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings",
+   "maturity_date"
+  ],
+  "siblings": [
+   "db-de000db9vkj0"
+  ]
+ },
+ "db-de000db9vqu4": {
+  "description": "the Deutsche Bank express certificate on Gerresheimer AG",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings"
+  ],
+  "siblings": []
+ },
+ "db-de000db9vju9": {
+  "description": "the Deutsche Bank express certificate on Dr. Ing. h.c. F. Porsche AG maturing in October 2028",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings",
+   "maturity_date"
+  ],
+  "siblings": [
+   "db-de000db9u9v0"
+  ]
+ },
+ "jb-159387048": {
+  "description": "the Julius Baer barrier reverse convertible on Broadcom Inc",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings"
+  ],
+  "siblings": []
+ },
+ "db-de000db9vqw0": {
+  "description": "the Deutsche Bank express certificate on Novo Nordisk A/S",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings"
+  ],
+  "siblings": []
+ },
+ "jb-159387050": {
+  "description": "the Julius Baer callable barrier reverse convertible on Cameco Corp",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings"
+  ],
+  "siblings": []
+ },
+ "jb-159387055": {
+  "description": "the Julius Baer barrier reverse convertible on First Solar Inc",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings"
+  ],
+  "siblings": []
+ },
+ "jb-159387056": {
+  "description": "the Julius Baer callable barrier reverse convertible on Adobe Systems Inc",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings"
+  ],
+  "siblings": []
+ },
+ "jb-159387064": {
+  "description": "the Julius Baer callable barrier reverse convertible on Freeport-McMoRan Inc",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings"
+  ],
+  "siblings": []
+ },
+ "jb-159387068": {
+  "description": "the Julius Baer autocallable barrier reverse convertible on BlackRock Inc",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings"
+  ],
+  "siblings": []
+ },
+ "jb-159387065": {
+  "description": "the Julius Baer barrier reverse convertible on Salesforce.com Inc",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings"
+  ],
+  "siblings": []
+ },
+ "jb-159387078": {
+  "description": "the Julius Baer autocallable barrier reverse convertible on Agnico Eagle Mines Ltd",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings"
+  ],
+  "siblings": []
+ },
+ "jb-159387082": {
+  "description": "the Julius Baer autocallable barrier reverse convertible on Chevron Corp",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings"
+  ],
+  "siblings": []
+ },
+ "jb-159387088": {
+  "description": "the Julius Baer barrier reverse convertible on Hermes International",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings"
+  ],
+  "siblings": []
+ },
+ "jb-159387087": {
+  "description": "the Julius Baer autocallable barrier reverse convertible on UnitedHealth Group Inc",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings"
+  ],
+  "siblings": []
+ },
+ "jb-159861700": {
+  "description": "the Julius Baer barrier reverse convertible on Sensirion Holding AG",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings"
+  ],
+  "siblings": []
+ },
+ "jb-159861705": {
+  "description": "the Julius Baer barrier reverse convertible on Inficon Holding AG",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings"
+  ],
+  "siblings": []
+ },
+ "jb-159861706": {
+  "description": "the Julius Baer barrier reverse convertible on R&S Group Holding AG",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings"
+  ],
+  "siblings": []
+ },
+ "jb-159861708": {
+  "description": "the Julius Baer barrier reverse convertible on Swatch Group AG",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings"
+  ],
+  "siblings": []
+ },
+ "jb-159861709": {
+  "description": "the Julius Baer barrier reverse convertible on SMG Swiss Marketplace Group AG",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings"
+  ],
+  "siblings": []
+ },
+ "jb-159861710": {
+  "description": "the Julius Baer autocallable barrier reverse convertible on Implenia AG",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings"
+  ],
+  "siblings": []
+ },
+ "jb-159861712": {
+  "description": "the Julius Baer barrier reverse convertible on Interroll Holding AG",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings"
+  ],
+  "siblings": []
+ },
+ "jb-159861714": {
+  "description": "the Julius Baer callable barrier reverse convertible on Sensirion Holding AG",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings"
+  ],
+  "siblings": []
+ },
+ "jb-159861715": {
+  "description": "the Julius Baer callable barrier reverse convertible on R&S Group Holding AG",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings"
+  ],
+  "siblings": []
+ },
+ "jb-159861711": {
+  "description": "the Julius Baer barrier reverse convertible on Mobilezone Holding AG",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings"
+  ],
+  "siblings": []
+ },
+ "jb-159861717": {
+  "description": "the Julius Baer barrier reverse convertible on Implenia AG",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings"
+  ],
+  "siblings": []
+ },
+ "jb-159861718": {
+  "description": "the Julius Baer autocallable barrier reverse convertible on Interroll Holding AG",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings"
+  ],
+  "siblings": []
+ },
+ "jb-159861724": {
+  "description": "the Julius Baer barrier reverse convertible on Medacta Group SA",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings"
+  ],
+  "siblings": []
+ },
+ "jb-159861727": {
+  "description": "the Julius Baer callable barrier reverse convertible on SMG Swiss Marketplace Group AG",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings"
+  ],
+  "siblings": []
+ },
+ "jb-159861725": {
+  "description": "the Julius Baer autocallable barrier reverse convertible on Swiss Life Holding AG",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings"
+  ],
+  "siblings": []
+ },
+ "jb-159861732": {
+  "description": "the Julius Baer callable barrier reverse convertible on Mobilezone Holding AG",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings"
+  ],
+  "siblings": []
+ },
+ "jb-159861733": {
+  "description": "the Julius Baer callable barrier reverse convertible on Medacta Group SA",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings"
+  ],
+  "siblings": []
+ },
+ "jb-159861735": {
+  "description": "the Julius Baer barrier reverse convertible on Avolta AG",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings"
+  ],
+  "siblings": []
+ },
+ "rbi-at0000a3ets8": {
+  "description": "the Raiffeisen reverse convertible on Erste Group Bank AG, OMV AG and Verbund AG maturing in October 2026",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings",
+   "maturity_date"
+  ],
+  "siblings": [
+   "rbi-at0000a3wnp9"
+  ]
+ },
+ "jb-159861740": {
+  "description": "the Julius Baer autocallable barrier reverse convertible on Swiss Re AG",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings"
+  ],
+  "siblings": []
+ },
+ "rbi-at0000a3ffb0": {
+  "description": "the Raiffeisen reverse convertible on OMV AG",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings"
+  ],
+  "siblings": []
+ },
+ "rbi-at0000a3ffc8": {
+  "description": "the Raiffeisen reverse convertible on voestalpine AG",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings"
+  ],
+  "siblings": []
+ },
+ "rbi-at0000a3ffd6": {
+  "description": "the Raiffeisen reverse convertible on Raiffeisen Bank International AG maturing in November 2026",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings",
+   "maturity_date"
+  ],
+  "siblings": [
+   "rbi-at0000a3u7m7"
+  ]
+ },
+ "jb-159861734": {
+  "description": "the Julius Baer autocallable barrier reverse convertible on Avolta AG",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings"
+  ],
+  "siblings": []
+ },
+ "rbi-at0000a3ffe4": {
+  "description": "the Raiffeisen reverse convertible on Wienerberger AG",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings"
+  ],
+  "siblings": []
+ },
+ "rbi-at0000a3gqq3": {
+  "description": "the Raiffeisen reverse convertible on Alphabet Inc, Microsoft Corp and Nvidia Corporation maturing in January 2027",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings",
+   "maturity_date"
+  ],
+  "siblings": [
+   "rbi-at0000a3w5q0"
+  ]
+ },
+ "rbi-at0000a3ga79": {
+  "description": "the Raiffeisen reverse convertible on Erste Group Bank AG, OMV AG and voestalpine AG maturing in December 2026",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings",
+   "maturity_date"
+  ],
+  "siblings": [
+   "rbi-at0000a3k3k2",
+   "rbi-at0000a3mu77",
+   "rbi-at0000a3n8d3",
+   "rbi-at0000a3ppc6",
+   "rbi-at0000a3qfe1"
+  ]
+ },
+ "rbi-at0000a3j0k1": {
+  "description": "the Raiffeisen reverse convertible on Advanced Micro Devices Inc, Meta Platforms Inc and Nvidia Corporation",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings"
+  ],
+  "siblings": []
+ },
+ "rbi-at0000a3k3k2": {
+  "description": "the Raiffeisen reverse convertible on Erste Group Bank AG, OMV AG and voestalpine AG maturing in April 2027",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings",
+   "maturity_date"
+  ],
+  "siblings": [
+   "rbi-at0000a3ga79",
+   "rbi-at0000a3mu77",
+   "rbi-at0000a3n8d3",
+   "rbi-at0000a3ppc6",
+   "rbi-at0000a3qfe1"
+  ]
+ },
+ "rbi-at0000a3kra7": {
+  "description": "the Raiffeisen reverse convertible on ASML Holding NV, Infineon Technologies AG and SAP SE maturing in May 2027",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings",
+   "maturity_date"
+  ],
+  "siblings": [
+   "rbi-at0000a3ux33"
+  ]
+ },
+ "rbi-at0000a3llz5": {
+  "description": "the Raiffeisen reverse convertible on Infineon Technologies AG, SAP SE and Siemens AG",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings"
+  ],
+  "siblings": []
+ },
+ "rbi-at0000a3mu77": {
+  "description": "the Raiffeisen reverse convertible on Erste Group Bank AG, OMV AG and voestalpine AG maturing in July 2027",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings",
+   "maturity_date"
+  ],
+  "siblings": [
+   "rbi-at0000a3ga79",
+   "rbi-at0000a3k3k2",
+   "rbi-at0000a3n8d3",
+   "rbi-at0000a3ppc6",
+   "rbi-at0000a3qfe1"
+  ]
+ },
+ "rbi-at0000a3mbl4": {
+  "description": "the Raiffeisen reverse convertible on Advanced Micro Devices Inc, International Business Machines Corp and Nvidia Corporation",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings"
+  ],
+  "siblings": []
+ },
+ "rbi-at0000a3n8d3": {
+  "description": "the Raiffeisen reverse convertible on Erste Group Bank AG, OMV AG and voestalpine AG maturing in September 2027",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings",
+   "maturity_date"
+  ],
+  "siblings": [
+   "rbi-at0000a3ga79",
+   "rbi-at0000a3k3k2",
+   "rbi-at0000a3mu77",
+   "rbi-at0000a3ppc6",
+   "rbi-at0000a3qfe1"
+  ]
+ },
+ "rbi-at0000a3ppc6": {
+  "description": "the Raiffeisen reverse convertible on Erste Group Bank AG, OMV AG and voestalpine AG maturing in November 2027",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings",
+   "maturity_date"
+  ],
+  "siblings": [
+   "rbi-at0000a3ga79",
+   "rbi-at0000a3k3k2",
+   "rbi-at0000a3mu77",
+   "rbi-at0000a3n8d3",
+   "rbi-at0000a3qfe1"
+  ]
+ },
+ "rbi-at0000a3qfe1": {
+  "description": "the Raiffeisen reverse convertible on Erste Group Bank AG, OMV AG and voestalpine AG maturing in December 2027",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings",
+   "maturity_date"
+  ],
+  "siblings": [
+   "rbi-at0000a3ga79",
+   "rbi-at0000a3k3k2",
+   "rbi-at0000a3mu77",
+   "rbi-at0000a3n8d3",
+   "rbi-at0000a3ppc6"
+  ]
+ },
+ "rbi-at0000a3qrb2": {
+  "description": "the Raiffeisen reverse convertible on Heidelberg Materials AG, Siemens AG and voestalpine AG",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings"
+  ],
+  "siblings": []
+ },
+ "rbi-at0000a3rcs6": {
+  "description": "the Raiffeisen reverse convertible on OMV AG, Raiffeisen Bank International AG and voestalpine AG",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings"
+  ],
+  "siblings": []
+ },
+ "rbi-at0000a3s3v1": {
+  "description": "the Raiffeisen reverse convertible on Advanced Micro Devices Inc, Alphabet Inc and Meta Platforms Inc",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings"
+  ],
+  "siblings": []
+ },
+ "rbi-at0000a3t3j5": {
+  "description": "the Raiffeisen reverse convertible on Erste Group Bank AG, Raiffeisen Bank International AG and voestalpine AG maturing in April 2028",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings",
+   "maturity_date"
+  ],
+  "siblings": [
+   "rbi-at0000a3ux17"
+  ]
+ },
+ "rbi-at0000a3u707": {
+  "description": "the Raiffeisen capped bonus certificate on voestalpine AG",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings"
+  ],
+  "siblings": []
+ },
+ "rbi-at0000a3u7m7": {
+  "description": "the Raiffeisen reverse convertible on Raiffeisen Bank International AG maturing in September 2027",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings",
+   "maturity_date"
+  ],
+  "siblings": [
+   "rbi-at0000a3ffd6"
+  ]
+ },
+ "rbi-at0000a3ux17": {
+  "description": "the Raiffeisen reverse convertible on Erste Group Bank AG, Raiffeisen Bank International AG and voestalpine AG maturing in June 2028",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings",
+   "maturity_date"
+  ],
+  "siblings": [
+   "rbi-at0000a3t3j5"
+  ]
+ },
+ "rbi-at0000a3ux33": {
+  "description": "the Raiffeisen reverse convertible on ASML Holding NV, Infineon Technologies AG and SAP SE maturing in June 2028",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings",
+   "maturity_date"
+  ],
+  "siblings": [
+   "rbi-at0000a3kra7"
+  ]
+ },
+ "rbi-at0000a3w5q0": {
+  "description": "the Raiffeisen reverse convertible on Alphabet Inc, Microsoft Corp and Nvidia Corporation maturing in September 2028",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings",
+   "maturity_date"
+  ],
+  "siblings": [
+   "rbi-at0000a3gqq3"
+  ]
+ },
+ "rbi-at0000a3wnp9": {
+  "description": "the Raiffeisen reverse convertible on Erste Group Bank AG, OMV AG and Verbund AG maturing in September 2028",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings",
+   "maturity_date"
+  ],
+  "siblings": [
+   "rbi-at0000a3ets8"
+  ]
+ },
+ "rbi-at0000a3w5n7": {
+  "description": "the Raiffeisen express certificate on voestalpine AG",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings"
+  ],
+  "siblings": []
+ },
+ "rbi-at0000a3wnq7": {
+  "description": "the Raiffeisen express certificate on OMV AG",
+  "attrs": [
+   "issuer",
+   "type",
+   "underlyings"
+  ],
+  "siblings": []
+ }
+}

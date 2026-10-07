@@ -77,3 +77,66 @@ def test_parse_pdf_on_generated_document(tmp_path):
     assert "60%" in doc.page(2).text
     assert len(doc.tree) >= 1
     assert doc.sha256 == file_sha256(path)
+
+
+def test_cache_is_tied_to_the_parser_version(tmp_path, monkeypatch):
+    import aex.experiments.tree_rag.parse as parse
+    pdf = tmp_path / "doc.pdf"
+    pdf.write_bytes(b"%PDF-1.4 same bytes")
+    calls = []
+
+    def fake_parser(path, doc_id):
+        calls.append(doc_id)
+        return ParsedDoc(doc_id, "T", file_sha256(path), (Page(1, "text"),), ())
+
+    cache = tmp_path / "cache"
+    load_or_parse(pdf, "d1", cache, parser=fake_parser)
+    assert json.loads((cache / "d1.json").read_text())["parser"] == parse.PARSER_ID
+    monkeypatch.setattr(parse, "PARSER_ID", "something-else")
+    load_or_parse(pdf, "d1", cache, parser=fake_parser)
+    assert calls == ["d1", "d1"]                      # same PDF, different parser config -> reparse
+
+
+def test_parser_id_says_ocr_is_off():
+    from aex.experiments.tree_rag.parse import PARSER_ID
+    assert "no-ocr" in PARSER_ID
+
+
+def test_relevel_by_numbering():
+    from aex.experiments.tree_rag.parse import heading_scheme, relevel
+    heads = [("VI. TERMS AND CONDITIONS", 1, 1), ("1. General", 1, 1), ("1.1 Issuer", 1, 2), ("Definitions", 1, 2),
+             ("1.2 Form", 1, 3), ("[bei nur einem Basiswert:", 1, 3), ("2. Payments", 1, 4),
+             ("VII. FORM OF FINAL TERMS", 1, 5), ("RISK FACTORS", 1, 6)]
+    assert [lvl for _, lvl, _ in relevel(heads)] == [1, 3, 4, 5, 4, 5, 3, 1, 2]
+    assert heading_scheme("Item 7A. Quantitative and Qualitative") == ("item", 0)
+    assert heading_scheme("4.2.1 Barrier") == ("arabic", 2)
+    assert heading_scheme("Beobachtungstage:") is None and heading_scheme("[if applicable:") is None
+
+
+def test_tree_only_change_rebuilds_tree_from_cached_headings(tmp_path, monkeypatch):
+    from aex.experiments.tree_rag import parse
+    pdf = tmp_path / "d.pdf"
+    pdf.write_bytes(b"%PDF-fake")
+    calls = []
+
+    def fake_parser(path, doc_id):
+        calls.append(doc_id)
+        return ParsedDoc(doc_id, "T", parse.file_sha256(path), (Page(1, "a"), Page(2, "b")),
+                         parse.build_tree([("1. A", 1, 1), ("1.1 B", 1, 2)], 2, "T"))
+
+    doc = load_or_parse(pdf, "d", tmp_path / "c", parser=fake_parser)
+    assert [n.level for n in doc.tree] == [1, 2]
+    cache = json.loads((tmp_path / "c" / "d.json").read_text())
+    assert cache["tree_id"] == parse.TREE_ID and cache["headings"] == [["1. A", 1, 1], ["1.1 B", 1, 2]]
+    monkeypatch.setattr(parse, "TREE_ID", "next")
+    again = load_or_parse(pdf, "d", tmp_path / "c", parser=fake_parser)
+    assert calls == ["d"] and [n.level for n in again.tree] == [1, 2]   # no re-parse
+    assert json.loads((tmp_path / "c" / "d.json").read_text())["tree_id"] == "next"
+
+
+def test_parts_nest_inside_roman_sections_when_roman_comes_first():
+    from aex.experiments.tree_rag.parse import relevel
+    jb = [("VI. TERMS AND CONDITIONS", 1, 1), ("Part A: Product Specific Conditions", 1, 1), ("1. Issue", 1, 2)]
+    assert [lvl for _, lvl, _ in relevel(jb)] == [1, 2, 3]
+    tenk = [("PART I", 1, 1), ("Item 1. Business", 1, 2), ("PART II", 1, 9), ("Item 5. Market", 1, 9)]
+    assert [lvl for _, lvl, _ in relevel(tenk)] == [1, 2, 1, 2]

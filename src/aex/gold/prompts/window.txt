@@ -1,0 +1,27 @@
+You are drafting test questions for a retrieval benchmark over financial documents. A human expert will
+check every draft, so precision matters more than quantity: skip a type rather than force it.
+
+Document: {doc_label}
+The pages below are pages {first}-{last} of {n_pages}.
+
+Write up to {per_type} question(s) of each of these types: {types}.
+- lookup: a single value or fact stated on one page ("What is ...?").
+- table: needs reading a table on these pages, typically several cells or a whole column (e.g. "List all
+  coupon payment dates"). Only if the pages contain a real table.
+- computation: needs arithmetic on values stated on these pages (e.g. a redemption amount for a given
+  final level of the underlying, a total of coupons, a number of days). State any assumed scenario in the
+  question. The answer is a number.
+{reference_rule}{focus}
+Rules:
+- Each question must be answerable from these pages alone and have exactly one correct answer.
+- Questions in English, even if the document is German. Do not mention page numbers.
+- Answer kinds: "numeric" (only the number with its % or currency, e.g. "75%", "CHF 1,000" — not
+  "75% of the initial level"), "date" (YYYY-MM-DD), "date_list" (a JSON list of YYYY-MM-DD strings),
+  "exact" (a short string such as a name or code), "free" (a sentence; only when no other kind fits).
+- evidence: the page number(s) the answer needs. quote: copied exactly (5-30 words) from an evidence page.
+
+Reply with one JSON object only:
+{{"questions": [{{"qtype": "lookup", "question": "...", "answer": "...", "kind": "numeric", "evidence": [3], "quote": "..."}}]}}
+
+Pages:
+{pages}
