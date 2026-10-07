@@ -17,7 +17,7 @@ def row_key(qid: str, arm: str, navigator: str, answerer: str) -> str:
 class Checkpoint:
     def __init__(self, path: str | Path) -> None:
         Path(path).parent.mkdir(parents=True, exist_ok=True)
-        self._db = sqlite3.connect(str(path))
+        self._db = sqlite3.connect(str(path), timeout=60)   # several run processes may share one file
         self._db.execute("PRAGMA journal_mode=WAL")
         self._db.execute(
             "CREATE TABLE IF NOT EXISTS rows ("

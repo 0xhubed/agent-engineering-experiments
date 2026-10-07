@@ -125,6 +125,16 @@ def test_cli_smoke_run(tmp_path):
     assert (tmp_path / "smoke.sqlite.manifest.json").exists()
 
 
+def test_cli_arms_subset_must_come_from_the_config(tmp_path):
+    cfg = (REPO / "configs" / "tree_rag" / "phase0-mock.yaml").read_text()
+    cfg_path = tmp_path / "smoke.yaml"
+    cfg_path.write_text(cfg.replace("runs/phase0-mock.sqlite", str(tmp_path / "smoke.sqlite")))
+    run = [sys.executable, "-m", "aex.experiments.tree_rag.run", str(cfg_path), "--arms"]
+    assert "oracle" in subprocess.run(run + ["oracle"], cwd=REPO, capture_output=True, text=True, check=True).stdout
+    bad = subprocess.run(run + ["raptor"], cwd=REPO, capture_output=True, text=True)
+    assert bad.returncode != 0 and "arms not in the config: raptor" in bad.stderr
+
+
 def test_build_client_passes_extra_body():
     from aex.experiments.tree_rag.run import build_client
     client = build_client("q", {"kind": "openai", "base_url": "http://x/v1", "model": "q",

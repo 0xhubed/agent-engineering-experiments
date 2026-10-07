@@ -34,11 +34,13 @@ def _check_evidence(record: dict, where: str) -> None:
         raise GoldError(f"{where}: answerable question needs at least one evidence page")
 
 
-def load_questions(path: str | Path, *, seed: int, dev_fraction: float = 0.2) -> list[Question]:
-    path = Path(path)
+def load_questions(path: str | Path | list[str | Path], *, seed: int, dev_fraction: float = 0.2) -> list[Question]:
+    """One gold file, or several (a run over all regimes); qids must be unique across them."""
+    paths = [Path(p) for p in path] if isinstance(path, list) else [Path(path)]
     questions: list[Question] = []
     seen: set[str] = set()
-    for lineno, line in enumerate(path.read_text().splitlines(), start=1):
+    lines = [(p, n, ln) for p in paths for n, ln in enumerate(p.read_text().splitlines(), start=1)]
+    for path, lineno, line in lines:
         if not line.strip():
             continue
         where = f"{path.name}:{lineno}"

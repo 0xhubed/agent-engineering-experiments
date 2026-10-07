@@ -1,12 +1,13 @@
 """Run arms × navigators × answerers over the gold questions, one checkpointed row each."""
 from __future__ import annotations
 
+import argparse
 import copy
 import json
 import os
 import sys
 from collections import defaultdict
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 
 import yaml
@@ -25,7 +26,7 @@ from aex.experiments.tree_rag.types import ParsedDoc, Question, Retrieval
 @dataclass(frozen=True)
 class RunConfig:
     seed: int
-    gold: str
+    gold: str | list[str]
     parsed_dir: str
     checkpoint: str
     arms: list[str]
@@ -250,7 +251,15 @@ def load_store(parsed_dir: str | Path) -> Store:
 
 
 def main(argv: list[str]) -> int:
-    cfg = RunConfig.from_yaml(argv[1])
+    ap = argparse.ArgumentParser(prog="run")
+    ap.add_argument("config")
+    ap.add_argument("--arms", help="comma-separated subset of the config's arms; processes running different "
+                                   "subsets can share one checkpoint")
+    args = ap.parse_args(argv[1:])
+    cfg = RunConfig.from_yaml(args.config)
+    only = args.arms.split(",") if args.arms else cfg.arms
+    if unknown := set(only) - set(cfg.arms):
+        raise SystemExit(f"arms not in the config: {', '.join(sorted(unknown))}")
     questions = load_questions(cfg.gold, seed=cfg.seed, dev_fraction=cfg.dev_fraction)
     store = load_store(cfg.parsed_dir)
     services = {name: build_service(name, spec) for name, spec in cfg.services.items()}
@@ -261,7 +270,7 @@ def main(argv: list[str]) -> int:
     Path(f"{cfg.checkpoint}.manifest.json").write_text(
         json.dumps(manifest | {"manifest_hash": manifest_hash(manifest)}, indent=2))
     checkpoint = Checkpoint(cfg.checkpoint)
-    run_experiment(cfg, clients=clients, store=store, questions=questions, checkpoint=checkpoint,
+    run_experiment(replace(cfg, arms=[a for a in cfg.arms if a in only]), clients=clients, store=store, questions=questions, checkpoint=checkpoint,
                    services=services)
     print(_summary(checkpoint.rows()))
     return 0
