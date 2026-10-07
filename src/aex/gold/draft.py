@@ -56,6 +56,7 @@ PRODUCT_LABEL = {
     "callable_barrier_reverse_convertible": "callable barrier reverse convertible",
     "barrier_reverse_convertible": "barrier reverse convertible",
     "reverse_convertible_bond": "reverse convertible", "express_certificate": "express certificate",
+    "capped_bonus_certificate": "capped bonus certificate",
 }
 FACT_FIELDS = ("underlyings", "currency", "denomination", "issue_price", "issue_size", "coupon_rate",
                "barrier_level", "strike_level", "autocall_trigger_level", "initial_fixing_date", "issue_date",
