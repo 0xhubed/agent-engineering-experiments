@@ -101,3 +101,24 @@ def test_needs_navigator_and_embedder():
         make_arm("raptor", navigator=_summariser([])).index(Store([_doc()]))
     with pytest.raises(ValueError, match="navigator"):
         make_arm("raptor", embedder=HashEmbedder()).index(Store([_doc()]))
+
+
+def test_the_indexer_writes_the_summaries_when_set(tmp_path):
+    nav_calls, idx_calls = [], []
+    arm = _arm(nav_calls, tmp_path, indexer=_summariser(idx_calls))
+    arm.index(Store([_doc()]))
+    assert idx_calls and not nav_calls
+    other = _arm([], tmp_path)          # navigator writes summaries: a different cache entry
+    other_calls = []
+    other.indexer = _summariser(other_calls)
+    other.indexer.model = "other"
+    other.index(Store([_doc()]))
+    assert other_calls
+
+
+def test_concurrent_summaries_build_the_same_tree():
+    one, many = _arm([]), _arm([], workers=4)
+    one.index(Store([_doc()]))
+    many.index(Store([_doc()]))
+    strip = lambda nodes: [(n.id, n.text, n.start, n.end, n.children) for n in nodes]
+    assert strip(many.nodes["d1"]) == strip(one.nodes["d1"])

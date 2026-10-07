@@ -14,6 +14,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
@@ -21,7 +22,7 @@ import numpy as np
 
 from aex.common.accounting import Ledger
 from aex.common.embed import Embedder
-from aex.common.llm import ChatClient, LLMError
+from aex.common.llm import ChatClient, Completion, LLMError
 from aex.experiments.tree_rag.arms.base import IndexStats, Store, register
 from aex.experiments.tree_rag.arms.vector import record_call
 from aex.experiments.tree_rag.retrieval import chunk_doc, top_k
@@ -78,8 +79,11 @@ class RaptorArm:
     def __init__(self, *, navigator: ChatClient | None = None, embedder: Embedder | None = None,
                  scopes: dict | None = None, branching: int = 6, max_levels: int = 3, k_words: int = 2000,
                  summary_words: int = 120, max_words: int = 200, overlap: int = 40, seed: int = 17,
-                 summary_max_tokens: int = 4096, cache_dir: str | None = None, **options) -> None:
+                 summary_max_tokens: int = 4096, cache_dir: str | None = None, indexer: ChatClient | None = None,
+                 workers: int = 1, **options) -> None:
         self.navigator, self.embedder, self.scopes = navigator, embedder, scopes or {}
+        self.indexer = indexer or navigator   # writes the summaries
+        self.workers = workers                # concurrent summary calls within a level (same result, faster)
         self.branching, self.max_levels, self.k_words = branching, max_levels, k_words
         self.summary_words, self.max_words, self.overlap, self.seed = summary_words, max_words, overlap, seed
         self.summary_max_tokens = summary_max_tokens
@@ -92,16 +96,16 @@ class RaptorArm:
     def _cache_file(self, doc) -> Path | None:
         if self.cache_dir is None:
             return None
-        key = "|".join(map(str, (doc.sha256, self.embedder.model, self.navigator.model, self.branching,
+        key = "|".join(map(str, (doc.sha256, self.embedder.model, self.indexer.model, self.branching,
                                  self.max_levels, self.summary_words, self.max_words, self.overlap, self.seed,
-                                 json.dumps(getattr(self.navigator, "extra_body", {}) or {}, sort_keys=True))))
+                                 json.dumps(getattr(self.indexer, "extra_body", {}) or {}, sort_keys=True))))
         return self.cache_dir / f"raptor-{doc.doc_id}-{hashlib.sha256(key.encode()).hexdigest()[:24]}.json"
 
     def index(self, store: Store) -> IndexStats:
         if self.embedder is None:
             raise ValueError("arm 'raptor' needs an embedder (services.embedder in the run config)")
-        if self.navigator is None:
-            raise ValueError("arm 'raptor' needs a navigator to write summaries (navigators in the run config)")
+        if self.indexer is None:
+            raise ValueError("arm 'raptor' needs a navigator or indexer to write summaries (run config)")
         llm_in, llm_out, llm_s = 0, 0, None
         embed_tokens, embed_s = 0, 0.0
         for doc_id in sorted(store.docs):
@@ -144,11 +148,13 @@ class RaptorArm:
             level += 1
             labels = kmeans(np.asarray([n.vector for n in level_nodes], dtype=np.float32),
                             math.ceil(len(level_nodes) / self.branching), seed=self.seed)
+            clusters = [(j, [n for n, lab in zip(level_nodes, labels) if lab == j]) for j in sorted(set(labels.tolist()))]
+            with ThreadPoolExecutor(max_workers=self.workers) as pool:
+                completions = list(pool.map(lambda c: self._summarise(doc.title, c[1]), clusters))
             parents: list[RNode] = []
-            for j in sorted(set(labels.tolist())):
-                members = [n for n, lab in zip(level_nodes, labels) if lab == j]
-                summary = self._summarise(doc.title, members, ledger)
-                parents.append(RNode(f"{doc.doc_id}:L{level}:{j}", doc.doc_id, level, summary,
+            for (j, members), completion in zip(clusters, completions):
+                ledger.record(completion, local=self.indexer.local)
+                parents.append(RNode(f"{doc.doc_id}:L{level}:{j}", doc.doc_id, level, completion.text.strip(),
                                      min(m.start for m in members), max(m.end for m in members),
                                      [m.id for m in members]))
             embedded = self.embedder.embed([p.text for p in parents])
@@ -159,16 +165,15 @@ class RaptorArm:
             level_nodes = parents
         return nodes, tokens, seconds
 
-    def _summarise(self, title: str, members: list[RNode], ledger: Ledger) -> str:
+    def _summarise(self, title: str, members: list[RNode]) -> Completion:
         excerpts = "\n\n".join(f"[p.{m.start}" + (f"-{m.end}" if m.end != m.start else "") + f"] {m.text}"
                                for m in members)
         prompt = SUMMARY_PROMPT.format(title=title, words=self.summary_words, excerpts=excerpts)
-        completion = self.navigator.complete([{"role": "user", "content": prompt}],
-                                             max_tokens=self.summary_max_tokens, seed=self.seed)
-        ledger.record(completion, local=self.navigator.local)
+        completion = self.indexer.complete([{"role": "user", "content": prompt}],
+                                           max_tokens=self.summary_max_tokens, seed=self.seed)
         if completion.finish_reason == "length":
             raise LLMError(f"raptor: summary truncated at max_tokens={self.summary_max_tokens}")
-        return completion.text.strip()
+        return completion
 
     # ── query ──
 

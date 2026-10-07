@@ -78,8 +78,9 @@ class PageIndexArm:
 
     def __init__(self, *, navigator: ChatClient | None = None, pdf_dir: str | None = None,
                  storage_dir: str = "data/pageindex", scopes: dict | None = None, seed: int = 0,
-                 **options) -> None:
+                 indexer: ChatClient | None = None, **options) -> None:
         self.navigator, self.scopes, self.seed = navigator, scopes or {}, seed
+        self.indexer = indexer or navigator   # its settings apply while trees are built
         self.pdf_dir = Path(pdf_dir) if pdf_dir else None
         self.storage_dir = Path(storage_dir)
         self._client = None
@@ -99,9 +100,12 @@ class PageIndexArm:
         _install_capture()
         # The SDK sends no temperature or seed, and no thinking setting on its indexing calls: the proxy
         # supplies ours wherever it leaves them out, so PageIndex runs under the same settings as every arm.
-        defaults = {"temperature": 0.0, "seed": self.seed, **(getattr(self.navigator, "extra_body", None) or {})}
+        if self.indexer is not self.navigator and (self.indexer.base_url, self.indexer.model) != (
+                self.navigator.base_url, self.navigator.model):
+            raise ValueError("arm 'pageindex': the indexer must be the navigator's served model (other settings only)")
         self._proxy = MeteringProxy(self.navigator.base_url, model=self.navigator.model, local=self.navigator.local,
-                                    defaults=defaults)
+                                    defaults=self._defaults(self.navigator),
+                                    timeout_s=getattr(self.navigator, "timeout_s", 600.0))
         self._proxy.start()
         self.storage_dir.mkdir(parents=True, exist_ok=True)
         self._client = _client_factory(model=self.navigator.model, storage_path=str(self.storage_dir),
@@ -120,6 +124,9 @@ class PageIndexArm:
 
         setattr(self._client, method, watched)
 
+    def _defaults(self, client: ChatClient) -> dict:
+        return {"temperature": 0.0, "seed": self.seed, **(getattr(client, "extra_body", None) or {})}
+
     @property
     def _map_file(self) -> Path:
         return self.storage_dir / "aex-index.json"
@@ -128,16 +135,28 @@ class PageIndexArm:
         self._ensure_client()
         known = json.loads(self._map_file.read_text()) if self._map_file.exists() else {}
         total = IndexStats()
+        indexer = json.dumps(self._defaults(self.indexer), sort_keys=True)
+        try:
+            self._proxy.defaults = self._defaults(self.indexer)
+            self._build_trees(store, known, indexer, total)
+        finally:
+            self._proxy.defaults = self._defaults(self.navigator)
+        self._ids = {d: v["pageindex_id"] for d, v in known.items()}
+        return total
+
+    def _build_trees(self, store: Store, known: dict, indexer: str, total: IndexStats) -> None:
         for doc_id in sorted(store.docs):
             pdf = self.pdf_dir / f"{doc_id}.pdf"
             if not pdf.exists():
                 raise FileNotFoundError(f"pageindex: no PDF for document {doc_id!r} at {pdf}")
             sha = file_sha256(pdf)
-            if known.get(doc_id, {}).get("sha256") != sha:
+            # Trees built before the indexer setting existed carry none; they were built with the navigator.
+            built_with = known.get(doc_id, {}).get("indexer", json.dumps(self._defaults(self.navigator), sort_keys=True))
+            if known.get(doc_id, {}).get("sha256") != sha or built_with != indexer:
                 ledger = Ledger()
                 with self._proxy.recording(ledger):
                     submitted = self._client.submit_document(str(pdf), metadata={"aex_doc_id": doc_id, "sha256": sha})
-                known[doc_id] = {"sha256": sha, "pageindex_id": submitted["doc_id"],
+                known[doc_id] = {"sha256": sha, "pageindex_id": submitted["doc_id"], "indexer": indexer,
                                  "cost": {"input_tokens": ledger.input_tokens, "output_tokens": ledger.output_tokens,
                                           "gpu_s": ledger.gpu_s}}
                 self._map_file.write_text(json.dumps(known, indent=1, sort_keys=True))
@@ -147,8 +166,6 @@ class PageIndexArm:
             total.output_tokens += cost.get("output_tokens", 0)
             if cost.get("gpu_s") is not None:
                 total.gpu_s = (total.gpu_s or 0.0) + cost["gpu_s"]
-        self._ids = {d: v["pageindex_id"] for d, v in known.items()}
-        return total
 
     # ── query ──
 

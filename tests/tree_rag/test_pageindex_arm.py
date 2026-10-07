@@ -243,3 +243,37 @@ def test_native_arm_is_registered_for_export():
     from aex.experiments.tree_rag.export import ARM_LABELS
     assert ARMS["pageindex_native"].family == "tree"
     assert ARM_LABELS["pageindex_native"] == "PageIndex (its own answer)"
+
+
+NO_THINK = {"chat_template_kwargs": {"enable_thinking": False}}
+
+
+def _indexer_arm(pdfs, tmp_path, monkeypatch, indexer_body):
+    arm = _arm(pdfs, tmp_path, monkeypatch)
+    arm.indexer = OpenAICompatClient("http://upstream/v1", "qwen3.8-27b", extra_body=indexer_body)
+    return arm
+
+
+def test_trees_are_built_under_the_indexer_settings_and_navigation_keeps_the_navigators(pdfs, tmp_path, monkeypatch):
+    arm = _indexer_arm(pdfs, tmp_path, monkeypatch, NO_THINK)
+    seen = []
+    monkeypatch.setattr(FakeClient, "submit_document", lambda self, path, metadata=None: (
+        seen.append(dict(arm._proxy.defaults)), {"doc_id": f"pi-{metadata['aex_doc_id']}"})[1])
+    arm.index(_store())
+    assert [d["chat_template_kwargs"] for d in seen] == [{"enable_thinking": False}] * 2
+    assert arm._proxy.defaults["chat_template_kwargs"] == {"reasoning_effort": "medium"}
+
+
+def test_a_different_indexer_rebuilds_the_trees(pdfs, tmp_path, monkeypatch):
+    _indexer_arm(pdfs, tmp_path, monkeypatch, NO_THINK).index(_store())
+    _indexer_arm(pdfs, tmp_path, monkeypatch, NO_THINK).index(_store())
+    assert FakeClient.instances[-1].submitted == []
+    _arm(pdfs, tmp_path, monkeypatch).index(_store())          # back to the navigator's settings
+    assert len(FakeClient.instances[-1].submitted) == 2
+
+
+def test_the_indexer_must_be_the_navigators_served_model(pdfs, tmp_path, monkeypatch):
+    arm = _arm(pdfs, tmp_path, monkeypatch)
+    arm.indexer = OpenAICompatClient("http://elsewhere/v1", "other-model")
+    with pytest.raises(ValueError, match="served model"):
+        arm.index(_store())

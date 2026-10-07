@@ -41,6 +41,10 @@ class RunConfig:
     services: dict[str, dict] = field(default_factory=dict)      # embedder / reranker specs shared by arms
     arm_options: dict[str, dict] = field(default_factory=dict)   # per-arm keyword options
     scope: dict[str, str] = field(default_factory=dict)          # dataset -> "corpus" | "question_docs"
+    # Model for index-time LLM calls (RAPTOR summaries, PageIndex tree building); default: the navigator.
+    # Same weights as the navigator, typically with thinking off: summarising needs no reasoning, and with
+    # thinking on a single summary can run past 10 minutes.
+    indexer: str | None = None
     prices: dict[str, list[float]] = field(default_factory=dict)
 
     @classmethod
@@ -187,6 +191,7 @@ def _gold_text(q: Question) -> str:
 def run_experiment(cfg: RunConfig, *, clients: dict[str, ChatClient], store: Store,
                    questions: list[Question], checkpoint: Checkpoint, services: dict | None = None) -> None:
     selected = [q for q in questions if q.split in cfg.splits]
+    store = store.reachable(selected, cfg.scope)
 
     def pending(key: str) -> bool:
         existing = checkpoint.get(key)
@@ -194,6 +199,8 @@ def run_experiment(cfg: RunConfig, *, clients: dict[str, ChatClient], store: Sto
 
     for arm_name in cfg.arms:
         options = {**(services or {}), "scopes": cfg.scope, **cfg.arm_options.get(arm_name, {})}
+        if cfg.indexer:
+            options["indexer"] = clients[cfg.indexer]
         probe = make_arm(arm_name, **options)
         navigators = cfg.navigators if probe.uses_navigator else ["none"]
         for navigator in navigators:
@@ -263,7 +270,8 @@ def main(argv: list[str]) -> int:
     questions = load_questions(cfg.gold, seed=cfg.seed, dev_fraction=cfg.dev_fraction)
     store = load_store(cfg.parsed_dir)
     services = {name: build_service(name, spec) for name, spec in cfg.services.items()}
-    used = set(cfg.answerers) | {cfg.judge} | {n for n in cfg.navigators if n != "none"}
+    used = set(cfg.answerers) | {cfg.judge} | {n for n in cfg.navigators if n != "none"} | (
+        {cfg.indexer} if cfg.indexer else set())
     clients = {mid: build_client(mid, cfg.models[mid]) for mid in used}
     manifest = build_manifest(asdict(cfg), models={mid: cfg.models[mid].get("revision", "unknown") for mid in used})
     Path(cfg.checkpoint).parent.mkdir(parents=True, exist_ok=True)

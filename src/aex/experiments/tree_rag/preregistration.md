@@ -31,7 +31,11 @@ never truncated). `pageindex_native` (PageIndex's own answer, judged) is reporte
 
 Serving image `vllm/vllm-openai@sha256:541e0e475418de6178b45c0d9ef420fb6be79bf43130a4d552cb668e425f4d27` on
 `hubed-dgx`. Thinking on with `reasoning_effort: medium`, temperature 0, seed 17, answer budget 8,192 tokens (a
-truncated answer is an error row, rerun, never scored). Second family and frontier reference: added only if
+truncated answer is an error row, rerun, never scored). **Index-time calls** — RAPTOR's cluster summaries and
+PageIndex's tree building — use the same weights with **thinking off** (`indexer` in the run config), identically
+for both tree arms; query-time navigation keeps thinking on. Measured 2026-10-07: with thinking on, a single
+RAPTOR summary ran past 4,096 tokens and PageIndex indexing calls past 10 minutes; with thinking off a summary
+takes 10–18 s. Second family and frontier reference: added only if
 decisions D6/D7 are settled before the run; otherwise reported as not run.
 
 ## 3. Primary metric and analysis
