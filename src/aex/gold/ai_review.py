@@ -17,6 +17,7 @@ Usage (one reviewer per shard; decisions go to gold/review/ai/<by>.jsonl until m
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import sys
@@ -202,7 +203,8 @@ def main(argv: list[str]) -> int:
             i, k = map(int, args.shard.split("/"))
             done = decided_ids()
             ids = [d for d in sorted(drafts) if d not in done and (not args.qtype or drafts[d]["qtype"] == args.qtype)]
-            print("\n".join(d for n, d in enumerate(sorted(drafts)) if d in ids and n % k == i))
+            # Shard by a stable hash, not by position: drafts are still being added while reviewers work.
+            print("\n".join(d for d in ids if int(hashlib.sha256(d.encode()).hexdigest(), 16) % k == i))
         elif args.cmd == "show":
             print(show(drafts[args.draft_id]))
         elif args.cmd == "page":
