@@ -597,13 +597,14 @@ class Drafter:
         dated = [e for e in notes if e.issue_date and _norm(human_date(e.issue_date)) == m.group(1)]
         return [e.doc_id for e in dated if e.doc_id in self.store.docs]
 
-    def cross_doc_tasks(self) -> list[Task]:
+    def cross_doc_tasks(self, round_: int = 1) -> list[Task]:
+        """Round 1 uses the first two provisions the final terms rely on; round n the next two."""
         def make(ts_id: str, sn_id: str) -> Callable[[], list[dict]]:
             def run() -> list[dict]:
                 ts, sn, entry = self.store.get(ts_id), self.store.get(sn_id), self.entries[ts_id]
                 pages = key_pages(ts)
                 terms = self.ask(prompt("cross_doc_terms", pages=render_pages(ts, pages)))
-                provisions = [p for p in terms.get("provisions") or [] if isinstance(p, dict)][:2]
+                provisions = [p for p in terms.get("provisions") or [] if isinstance(p, dict)][2 * (round_ - 1):2 * round_]
                 if not provisions:
                     return []
                 bm25 = BM25([p.text for p in sn.pages])
@@ -637,7 +638,7 @@ class Drafter:
                     elif not all(any(q["ok"] and q["doc_id"] == d for q in quotes) for d in docs):
                         problem = "a quote was not found on its page"
                     kind, answer = normalise_answer(item.get("kind"), item.get("answer"))
-                    out.append(_draft(task=f"cross_doc:{ts_id}:{sn_id}", n=n, corpus=entry.corpus, regime="A",
+                    out.append(_draft(task=f"cross_doc:{ts_id}:{sn_id}" + (f":r{round_}" if round_ > 1 else ""), n=n, corpus=entry.corpus, regime="A",
                                       qtype="cross_doc", doc_ids=[ts_id, sn_id], question=question,
                                       answer=answer, kind=kind,
                                       evidence=[{"doc_id": e["doc_id"], "page": e["page"]} for e in evidence],
@@ -648,7 +649,8 @@ class Drafter:
         tasks = []
         for ts_id in self.regime("A"):
             for sn_id in self.linked_notes(ts_id):
-                tasks.append(Task(f"cross_doc:{ts_id}:{sn_id}", "cross_doc", make(ts_id, sn_id)))
+                key = f"cross_doc:{ts_id}:{sn_id}" + (f":r{round_}" if round_ > 1 else "")
+                tasks.append(Task(key, "cross_doc", make(ts_id, sn_id)))
         return tasks
 
     def write_descriptions_and_disambiguation(self, log=print) -> None:
@@ -680,6 +682,7 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--stages", default=",".join(STAGES))
     ap.add_argument("--limit", type=int, default=None, help="run at most N tasks per stage (trial runs)")
     ap.add_argument("--docs", default=None, help="regex: only tasks whose key matches (trial runs)")
+    ap.add_argument("--cross-doc-round", type=int, default=1, help="cross_doc: use the next pair of provisions")
     args = ap.parse_args(argv[1:])
     cfg = yaml.safe_load(Path(args.config).read_text())
     excluded = ExclusionList.load()
@@ -697,7 +700,8 @@ def main(argv: list[str]) -> int:
         if stage == "disambiguation":
             drafter.write_descriptions_and_disambiguation()
             continue
-        tasks = getattr(drafter, f"{stage}_tasks")()
+        tasks = (drafter.cross_doc_tasks(args.cross_doc_round) if stage == "cross_doc"
+                 else getattr(drafter, f"{stage}_tasks")())
         if args.docs:
             tasks = [t for t in tasks if re.search(args.docs, t.key)]
         failures += drafter.run(tasks[:args.limit] if args.limit else tasks, workers=cfg.get("workers", 4),
