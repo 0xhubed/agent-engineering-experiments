@@ -543,13 +543,15 @@ class Drafter:
         best = sorted(p + 1 for p in top_k(bm25.scores(query), 15))
         return best, f"the 15 of {doc.n_pages} pages that best match the question"
 
-    def unanswerable_tasks(self) -> list[Task]:
+    def unanswerable_tasks(self, round_: int = 1) -> list[Task]:
+        """Round n > 1 draws a different topic nudge and gets its own task keys."""
+        suffix = f":r{round_}" if round_ > 1 else ""
         def make(doc_id: str, w: int, pages: list[int]) -> Callable[[], list[dict]]:
             def run() -> list[dict]:
                 doc, entry = self.store.get(doc_id), self.entries[doc_id]
                 reply = self.ask(prompt("unanswerable", doc_label=doc_label(entry), first=pages[0], last=pages[-1],
                                         n_pages=doc.n_pages, n=1, reference_rule=self._reference_rule(doc_id),
-                                        focus=unanswerable_focus_for(doc_id, w, self.seed),
+                                        focus=unanswerable_focus_for(doc_id, w, self.seed + 1000 * (round_ - 1)),
                                         pages=render_pages(doc, pages)))
                 out = []
                 for n, item in enumerate(reply.get("questions") or []):
@@ -565,7 +567,7 @@ class Drafter:
                         problem = "question does not use the {product} placeholder"
                     elif check.get("answered") is not False:
                         problem = f"checker found an answer on p.{check.get('page')}: {check.get('quote')!r}"
-                    out.append(_draft(task=f"unanswerable:{doc_id}:{w}", n=n, corpus=entry.corpus,
+                    out.append(_draft(task=f"unanswerable:{doc_id}:{w}{suffix}", n=n, corpus=entry.corpus,
                                       regime=entry.regime, qtype="unanswerable", doc_ids=[doc_id], question=question,
                                       answer=None, kind="unanswerable", evidence=[], quotes=[],
                                       status="auto_rejected" if problem else "draft", reason=problem,
@@ -579,7 +581,7 @@ class Drafter:
             if self.entries[doc_id].regime == "B":
                 windows = windows[::2]   # every other window: unanswerable needs ~10% of the questions
             for w, pages in enumerate(windows):
-                tasks.append(Task(f"unanswerable:{doc_id}:{w}", "unanswerable", make(doc_id, w, pages)))
+                tasks.append(Task(f"unanswerable:{doc_id}:{w}{suffix}", "unanswerable", make(doc_id, w, pages)))
         return tasks
 
     def linked_notes(self, doc_id: str) -> list[str]:
@@ -682,7 +684,8 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--stages", default=",".join(STAGES))
     ap.add_argument("--limit", type=int, default=None, help="run at most N tasks per stage (trial runs)")
     ap.add_argument("--docs", default=None, help="regex: only tasks whose key matches (trial runs)")
-    ap.add_argument("--cross-doc-round", type=int, default=1, help="cross_doc: use the next pair of provisions")
+    ap.add_argument("--round", type=int, default=1,
+                    help="cross_doc: the next pair of provisions; unanswerable: a new topic nudge")
     args = ap.parse_args(argv[1:])
     cfg = yaml.safe_load(Path(args.config).read_text())
     excluded = ExclusionList.load()
@@ -700,7 +703,8 @@ def main(argv: list[str]) -> int:
         if stage == "disambiguation":
             drafter.write_descriptions_and_disambiguation()
             continue
-        tasks = (drafter.cross_doc_tasks(args.cross_doc_round) if stage == "cross_doc"
+        tasks = (drafter.cross_doc_tasks(args.round) if stage == "cross_doc"
+                 else drafter.unanswerable_tasks(args.round) if stage == "unanswerable"
                  else getattr(drafter, f"{stage}_tasks")())
         if args.docs:
             tasks = [t for t in tasks if re.search(args.docs, t.key)]

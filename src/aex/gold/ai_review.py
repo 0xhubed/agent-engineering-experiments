@@ -158,14 +158,27 @@ def merge() -> str:
     already = set()
     if DECISIONS.exists():
         already = {json.loads(ln)["draft_id"] for ln in DECISIONS.read_text().splitlines() if ln.strip()}
-    new = []
+    # Several reviewers may have decided the same draft. An adjudication (written by `by=adjudication`) wins;
+    # otherwise the reviewers must agree on accept/reject, or the merge stops.
+    per_draft: dict[str, dict[str, dict]] = {}
     for path in sorted(AI_DIR.glob("*.jsonl")):
-        latest: dict[str, dict] = {}
         for ln in path.read_text().splitlines():
             if ln.strip():
                 d = json.loads(ln)
-                latest[d["draft_id"]] = d
-        new += [d for k, d in latest.items() if k not in already]
+                per_draft.setdefault(d["draft_id"], {})[path.stem] = d
+    drafts = load_drafts()
+    new, unresolved = [], []
+    for draft_id, by_reviewer in sorted(per_draft.items()):
+        if draft_id in already or draft_id not in drafts:
+            continue
+        if "adjudication" in by_reviewer:
+            new.append(by_reviewer["adjudication"])
+        elif len({d["action"] for d in by_reviewer.values()}) == 1:
+            new.append(max(by_reviewer.values(), key=lambda d: d["at"]))
+        else:
+            unresolved.append(draft_id)
+    if unresolved:
+        raise ReviewError(f"{len(unresolved)} conflicting decisions need an adjudication: {', '.join(unresolved)}")
     DECISIONS.parent.mkdir(parents=True, exist_ok=True)
     with open(DECISIONS, "a") as fh:
         for d in sorted(new, key=lambda d: d["at"]):
