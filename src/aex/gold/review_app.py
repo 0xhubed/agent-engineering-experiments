@@ -81,13 +81,14 @@ def parse_answer(kind: str, text: str):
     return text.strip()
 
 
-def gold_records(draft: dict, edits: dict, *, isin: str | None, description: str | None) -> list[dict]:
+def gold_records(draft: dict, edits: dict, *, isin: str | None, description: str | None,
+                 verified_by: str = "daniel") -> list[dict]:
     """The gold.v1 record(s) for an accepted draft. Regime A gives an ISIN form and, when the product
     has a unique description, a description form, sharing a pair_id."""
     kind = edits["kind"]
     base = {"dataset": draft["corpus"], "regime": draft["regime"], "qtype": edits.get("qtype", draft["qtype"]),
             "doc_ids": draft["doc_ids"], "gold": {"kind": kind, "value": parse_answer(kind, edits["answer"])},
-            "evidence": [] if kind == "unanswerable" else edits["evidence"], "verified_by": "daniel"}
+            "evidence": [] if kind == "unanswerable" else edits["evidence"], "verified_by": verified_by}
     question = edits["question"].strip()
     if draft["regime"] != "A":
         return [{"qid": draft["draft_id"], "question": question, **base}]
@@ -218,7 +219,9 @@ class Review:
             if d["action"] != "accept" or draft_id not in self.drafts:
                 continue
             draft = self.drafts[draft_id]
-            for r in gold_records(draft, d["edits"], isin=self.isin(draft), description=self.description(draft)):
+            # Decisions made outside this app (aex.gold.ai_review) carry their own verifier.
+            for r in gold_records(draft, d["edits"], isin=self.isin(draft), description=self.description(draft),
+                                  verified_by=d.get("verifier", "daniel")):
                 validate(r)
                 by_corpus.setdefault(draft["corpus"], []).append(r)
         for corpus in {d["corpus"] for d in self.drafts.values()}:
