@@ -1,9 +1,9 @@
 """Model review of drafted gold questions, recorded as such (decided with Daniel, 2026-10-07).
 
-Daniel delegated the first-pass review to Claude: every decision made here is stored with
+Daniel delegated the review to Claude: every decision made here is stored with
 `verifier: claude-opus-5.5`, so accepted items become gold with `verified_by: claude-opus-5.5`, never
-"daniel". A random sample of these accepts is then audited by Daniel (aex.gold.audit) and the measured
-error rate is reported with the results.
+"daniel". No human audit follows (Daniel's decision, 2026-10-07): the results report this gold as
+model-verified.
 
 Usage (one reviewer per shard; decisions go to gold/review/ai/<by>.jsonl until merged):
   python -m aex.gold.ai_review list --shard 0/8

@@ -1,4 +1,5 @@
-"""Load verified gold questions. Only human-verified items may enter a run (spec §5.5)."""
+"""Load verified gold questions. Only reviewed items (`verified_by` set) may enter a run (spec §5.5; see
+the pre-registration for the model-verified deviation)."""
 from __future__ import annotations
 
 import hashlib

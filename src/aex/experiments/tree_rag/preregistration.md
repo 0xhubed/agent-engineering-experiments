@@ -52,8 +52,11 @@ decisions D6/D7 are settled before the run; otherwise reported as not run.
 
 ## 4. Data and splits
 
-- Gold: `gold/termsheets.jsonl`, `gold/prospectuses.jsonl` (human-verified, `verified_by: daniel`) and FinanceBench
-  regenerated from `patronus-ai/financebench@cc39aeb`. Regime-A questions exist as ISIN/description pairs sharing
+- Gold: `gold/termsheets.jsonl`, `gold/prospectuses.jsonl` and FinanceBench regenerated from
+  `patronus-ai/financebench@cc39aeb`. **Deviation from spec §5.5:** the termsheet and prospectus gold is
+  model-verified, not human-verified. Claude (Opus 5.5) reviewed every LLM draft against the source pages
+  (`verified_by: claude-opus-5.5`, one-line reason per decision in `gold/review/decisions.jsonl`), and no human
+  audit was run (Daniel's decision, 2026-10-07). The article states this next to every result built on that gold. Regime-A questions exist as ISIN/description pairs sharing
   a `pair_id`.
 - Split: dev 20% / test 80%, by `sha256("17:" + (pair_id or qid))`. Both forms of a pair share a split.
 - Quotas before freezing (`python -m aex.gold.report`): ≥150 test questions per regime (a pair counts once),
