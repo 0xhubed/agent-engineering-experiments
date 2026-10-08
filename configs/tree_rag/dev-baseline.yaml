@@ -22,7 +22,7 @@ models:
     revision: unsloth/Qwen3.8-27B-NVFP4@7d6f8d4d72f56b92b3cdbf22f156b90e1bab0108
     local: true
     extra_body: {chat_template_kwargs: {reasoning_effort: medium}}
-    timeout_s: 1800   # requests queue behind other arms' (max-num-seqs 4)
+    timeout_s: 1800   # requests may queue behind other arms (max-num-seqs 16)
   qwen3.8-27b-judge:
     kind: openai
     base_url: http://hubed-dgx:8000/v1
@@ -54,7 +54,7 @@ services:
 arm_options:
   chunk_embed: {cache_dir: data/cache}
   hybrid_rerank: {cache_dir: data/cache}
-  raptor: {cache_dir: data/cache, workers: 3}
+  raptor: {cache_dir: data/cache, workers: 8}
   pageindex: {pdf_dir: data/pdfs, storage_dir: data/pageindex}
   vec_tree: {pdf_dir: data/pdfs, storage_dir: data/pageindex, doc_k: 1}
 prices: {}

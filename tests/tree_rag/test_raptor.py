@@ -1,3 +1,4 @@
+import json
 import numpy as np
 import pytest
 
@@ -122,3 +123,20 @@ def test_concurrent_summaries_build_the_same_tree():
     many.index(Store([_doc()]))
     strip = lambda nodes: [(n.id, n.text, n.start, n.end, n.children) for n in nodes]
     assert strip(many.nodes["d1"]) == strip(one.nodes["d1"])
+
+
+def test_a_looping_summary_is_cut_to_the_word_budget_and_counted(tmp_path):
+    from aex.common.llm import Completion
+
+    class Looping:
+        model, local, extra_body = "loop", True, {}
+
+        def complete(self, messages, *, max_tokens, temperature=0.0, seed=0):
+            return Completion("again " * 500, 100, max_tokens, 0.1, "loop", finish_reason="length")
+
+    arm = _arm([], tmp_path, indexer=Looping(), summary_words=7)
+    arm.index(Store([_doc()]))
+    summaries = [n for n in arm.nodes["d1"] if n.level > 0]
+    assert summaries and all(n.text == " ".join(["again"] * 7) for n in summaries)
+    cached = json.loads(next(tmp_path.glob("raptor-*.json")).read_text())
+    assert cached["truncated_summaries"] == len(summaries)

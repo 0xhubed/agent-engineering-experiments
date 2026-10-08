@@ -145,6 +145,7 @@ class PageIndexArm:
         return total
 
     def _build_trees(self, store: Store, known: dict, indexer: str, total: IndexStats) -> None:
+        failed: dict[str, str] = {}
         for doc_id in sorted(store.docs):
             pdf = self.pdf_dir / f"{doc_id}.pdf"
             if not pdf.exists():
@@ -154,8 +155,12 @@ class PageIndexArm:
             built_with = known.get(doc_id, {}).get("indexer", json.dumps(self._defaults(self.navigator), sort_keys=True))
             if known.get(doc_id, {}).get("sha256") != sha or built_with != indexer:
                 ledger = Ledger()
-                with self._proxy.recording(ledger):
-                    submitted = self._client.submit_document(str(pdf), metadata={"aex_doc_id": doc_id, "sha256": sha})
+                try:
+                    with self._proxy.recording(ledger):
+                        submitted = self._client.submit_document(str(pdf), metadata={"aex_doc_id": doc_id, "sha256": sha})
+                except Exception as exc:   # build every other tree first; the run still stops below
+                    failed[doc_id] = f"{type(exc).__name__}: {exc}"
+                    continue
                 known[doc_id] = {"sha256": sha, "pageindex_id": submitted["doc_id"], "indexer": indexer,
                                  "cost": {"input_tokens": ledger.input_tokens, "output_tokens": ledger.output_tokens,
                                           "gpu_s": ledger.gpu_s}}
@@ -166,6 +171,9 @@ class PageIndexArm:
             total.output_tokens += cost.get("output_tokens", 0)
             if cost.get("gpu_s") is not None:
                 total.gpu_s = (total.gpu_s or 0.0) + cost["gpu_s"]
+        if failed:
+            raise RuntimeError(f"pageindex: {len(failed)} tree(s) failed to build: "
+                               + "; ".join(f"{d}: {e}" for d, e in failed.items()))
 
     # ── query ──
 

@@ -115,8 +115,8 @@ class RaptorArm:
                 cached = json.loads(cache.read_text())
             else:
                 doc_ledger = Ledger()
-                nodes, tokens, seconds = self._build(doc, doc_ledger)
-                cached = {"nodes": [asdict(n) for n in nodes],
+                nodes, tokens, seconds, truncated = self._build(doc, doc_ledger)
+                cached = {"nodes": [asdict(n) for n in nodes], "truncated_summaries": truncated,
                           "cost": {"llm_input": doc_ledger.input_tokens, "llm_output": doc_ledger.output_tokens,
                                    "llm_s": doc_ledger.gpu_s, "embed_tokens": tokens, "embed_s": seconds}}
                 if cache is not None:
@@ -134,16 +134,16 @@ class RaptorArm:
         gpu = None if llm_s is None and local_embed is None else (llm_s or 0.0) + (local_embed or 0.0)
         return IndexStats(input_tokens=llm_in + embed_tokens, output_tokens=llm_out, gpu_s=gpu)
 
-    def _build(self, doc, ledger: Ledger) -> tuple[list[RNode], int, float]:
+    def _build(self, doc, ledger: Ledger) -> tuple[list[RNode], int, float, int]:
         chunks = chunk_doc(doc, max_words=self.max_words, overlap=self.overlap)
         if not chunks:
-            return [], 0, 0.0
+            return [], 0, 0.0, 0
         leaves_embed = self.embedder.embed([c.text for c in chunks])
         tokens, seconds = leaves_embed.input_tokens, leaves_embed.latency_s
         level_nodes = [RNode(c.id, doc.doc_id, 0, c.text, c.page, c.page, [], v)
                        for c, v in zip(chunks, leaves_embed.vectors)]
         nodes = list(level_nodes)
-        level = 0
+        level, truncated = 0, 0
         while len(level_nodes) > self.branching and level < self.max_levels:
             level += 1
             labels = kmeans(np.asarray([n.vector for n in level_nodes], dtype=np.float32),
@@ -154,7 +154,14 @@ class RaptorArm:
             parents: list[RNode] = []
             for (j, members), completion in zip(clusters, completions):
                 ledger.record(completion, local=self.indexer.local)
-                parents.append(RNode(f"{doc.doc_id}:L{level}:{j}", doc.doc_id, level, completion.text.strip(),
+                text = completion.text.strip()
+                if completion.finish_reason == "length":
+                    # A summary that runs to max_tokens has looped (seen once in 13k calls, on a 539-page
+                    # securities note): keep its first summary_words words, as asked, and count it.
+                    text, truncated = " ".join(text.split()[:self.summary_words]), truncated + 1
+                    if not text:
+                        raise LLMError(f"raptor: empty summary truncated at max_tokens={self.summary_max_tokens}")
+                parents.append(RNode(f"{doc.doc_id}:L{level}:{j}", doc.doc_id, level, text,
                                      min(m.start for m in members), max(m.end for m in members),
                                      [m.id for m in members]))
             embedded = self.embedder.embed([p.text for p in parents])
@@ -163,7 +170,7 @@ class RaptorArm:
                 p.vector = v
             nodes += parents
             level_nodes = parents
-        return nodes, tokens, seconds
+        return nodes, tokens, seconds, truncated
 
     def _summarise(self, title: str, members: list[RNode]) -> Completion:
         excerpts = "\n\n".join(f"[p.{m.start}" + (f"-{m.end}" if m.end != m.start else "") + f"] {m.text}"
@@ -171,8 +178,6 @@ class RaptorArm:
         prompt = SUMMARY_PROMPT.format(title=title, words=self.summary_words, excerpts=excerpts)
         completion = self.indexer.complete([{"role": "user", "content": prompt}],
                                            max_tokens=self.summary_max_tokens, seed=self.seed)
-        if completion.finish_reason == "length":
-            raise LLMError(f"raptor: summary truncated at max_tokens={self.summary_max_tokens}")
         return completion
 
     # ── query ──

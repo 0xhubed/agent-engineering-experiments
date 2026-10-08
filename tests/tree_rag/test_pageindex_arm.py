@@ -277,3 +277,18 @@ def test_the_indexer_must_be_the_navigators_served_model(pdfs, tmp_path, monkeyp
     arm.indexer = OpenAICompatClient("http://elsewhere/v1", "other-model")
     with pytest.raises(ValueError, match="served model"):
         arm.index(_store())
+
+
+def test_a_failed_tree_does_not_stop_the_others_but_fails_the_index(pdfs, tmp_path, monkeypatch):
+    arm = _arm(pdfs, tmp_path, monkeypatch)
+
+    def submit(self, path, metadata=None):
+        if metadata["aex_doc_id"] == "d1":
+            raise RuntimeError("node dropped")
+        self.submitted.append((path, metadata))
+        return {"doc_id": f"pi-{metadata['aex_doc_id']}"}
+
+    monkeypatch.setattr(FakeClient, "submit_document", submit)
+    with pytest.raises(RuntimeError, match="1 tree\\(s\\) failed to build: d1: RuntimeError: node dropped"):
+        arm.index(_store())
+    assert [m["aex_doc_id"] for _, m in FakeClient.instances[-1].submitted] == ["d2"]
