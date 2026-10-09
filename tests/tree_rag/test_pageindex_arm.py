@@ -279,16 +279,56 @@ def test_the_indexer_must_be_the_navigators_served_model(pdfs, tmp_path, monkeyp
         arm.index(_store())
 
 
-def test_a_failed_tree_does_not_stop_the_others_but_fails_the_index(pdfs, tmp_path, monkeypatch):
-    arm = _arm(pdfs, tmp_path, monkeypatch)
-
+def _failing_d1(monkeypatch, calls=None):
     def submit(self, path, metadata=None):
+        if calls is not None:
+            calls.append(metadata["aex_doc_id"])
         if metadata["aex_doc_id"] == "d1":
             raise RuntimeError("node dropped")
         self.submitted.append((path, metadata))
         return {"doc_id": f"pi-{metadata['aex_doc_id']}"}
 
     monkeypatch.setattr(FakeClient, "submit_document", submit)
-    with pytest.raises(RuntimeError, match="1 tree\\(s\\) failed to build: d1: RuntimeError: node dropped"):
-        arm.index(_store())
+
+
+def test_a_failed_tree_is_recorded_and_the_others_still_build(pdfs, tmp_path, monkeypatch, capsys):
+    arm = _arm(pdfs, tmp_path, monkeypatch)
+    _failing_d1(monkeypatch)
+    arm.index(_store())
     assert [m["aex_doc_id"] for _, m in FakeClient.instances[-1].submitted] == ["d2"]
+    assert arm.failed == {"d1": "RuntimeError: node dropped"}
+    assert "1 tree(s) failed to build: d1: RuntimeError: node dropped" in capsys.readouterr().err
+
+
+def test_a_tree_that_failed_under_the_same_settings_is_not_retried(pdfs, tmp_path, monkeypatch):
+    calls = []
+    _arm(pdfs, tmp_path, monkeypatch).index(_store())     # d2 built; d1 too, under the fake's default submit
+    (tmp_path / "pi" / "aex-index.json").unlink()
+    arm = _arm(pdfs, tmp_path, monkeypatch)
+    _failing_d1(monkeypatch, calls)
+    arm.index(_store())
+    arm = _arm(pdfs, tmp_path, monkeypatch)
+    arm.index(_store())
+    assert calls == ["d1", "d2"] and arm.failed == {"d1": "RuntimeError: node dropped"}
+
+
+def test_a_question_whose_only_tree_failed_is_scored_wrong_without_an_answer(pdfs, tmp_path, monkeypatch):
+    from aex.common.checkpoint import Checkpoint
+    from aex.common.llm import MockClient
+    from aex.experiments.tree_rag.run import RunConfig, run_experiment
+    FakeClient.instances = []
+    monkeypatch.setattr(pia, "_client_factory", lambda **config: FakeClient(**config))
+    _failing_d1(monkeypatch)
+    answered = []
+    clients = {"nav": OpenAICompatClient("http://upstream/v1", "nav"),
+               "ans": MockClient(lambda m: answered.append(m) or "ANSWER: 4", model="ans"),
+               "judge": MockClient(lambda m: "CORRECT", model="judge")}
+    cfg = RunConfig(seed=17, gold="", parsed_dir="", checkpoint="", arms=["pageindex"], navigators=["nav"],
+                    answerers=["ans"], judge="judge", models={}, splits=("test",), scope={"ts": "question_docs"},
+                    arm_options={"pageindex": {"pdf_dir": str(pdfs), "storage_dir": str(tmp_path / "pi")}})
+    cp = Checkpoint(tmp_path / "cp.sqlite")
+    run_experiment(cfg, clients=clients, store=_store(), questions=[_q()], checkpoint=cp)
+    rows = {r["arm"]: r for r in cp.rows()}
+    assert set(rows) == {"pageindex", "pageindex_native"} and not answered
+    assert all(r["correct"] is False and r["failure"] == "index_failed" for r in rows.values())
+    assert rows["pageindex"]["detail"]["trace"]["index_failed"] == ["d1"]

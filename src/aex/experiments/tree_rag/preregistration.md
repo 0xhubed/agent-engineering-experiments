@@ -69,7 +69,10 @@ decisions D6/D7 are settled before the run; otherwise reported as not run.
 ## 5. Procedure and exclusions
 
 1. Dev tuning: each arm ≤5 configurations, chosen by dev accuracy, log committed (`runs/dev-tuning.md`). PageIndex
-   runs its released defaults only.
+   runs its released defaults only. A document whose PageIndex tree fails to build under them is not retried with
+   other settings: questions that need only that document are scored incorrect for `pageindex`, `pageindex_native`
+   and `vec_tree` (failure class `index_failed`), never excluded, and the count is reported. Dev: 1 of 113 trees
+   (`fb-johnson-johnson-2022-10k`, an SDK error while finalising its tree), 1 dev question.
 2. Determinism check (plan 1c Task 3) before the test run; its outcome fixes the reproducibility criterion here,
    as an addendum committed before the test run.
 3. One full test-split run. `error` rows are rerun until none remain; `not_applicable` rows are reported, never

@@ -9,6 +9,7 @@ MeteringProxy so tokens, latency and sequential calls land in the question's Led
 from __future__ import annotations
 
 import json
+import sys
 import threading
 import time
 from pathlib import Path
@@ -86,6 +87,7 @@ class PageIndexArm:
         self._client = None
         self._proxy: MeteringProxy | None = None
         self._ids: dict[str, str] = {}
+        self.failed: dict[str, str] = {}   # doc_id -> why its tree could not be built
         self._shown: list[tuple[str, str]] | None = None   # (what, pageindex id) the agent was shown, in order
 
     # ── setup ──
@@ -131,26 +133,38 @@ class PageIndexArm:
     def _map_file(self) -> Path:
         return self.storage_dir / "aex-index.json"
 
+    @property
+    def _failed_file(self) -> Path:
+        return self.storage_dir / "aex-failed.json"
+
     def index(self, store: Store) -> IndexStats:
         self._ensure_client()
         known = json.loads(self._map_file.read_text()) if self._map_file.exists() else {}
+        failed = json.loads(self._failed_file.read_text()) if self._failed_file.exists() else {}
         total = IndexStats()
         indexer = json.dumps(self._defaults(self.indexer), sort_keys=True)
         try:
             self._proxy.defaults = self._defaults(self.indexer)
-            self._build_trees(store, known, indexer, total)
+            self._build_trees(store, known, failed, indexer, total)
         finally:
             self._proxy.defaults = self._defaults(self.navigator)
         self._ids = {d: v["pageindex_id"] for d, v in known.items()}
+        self.failed = {d: v["error"] for d, v in failed.items() if d in store.docs and d not in self._ids}
+        if self.failed:
+            # PageIndex runs its released defaults only (pre-registration §5): a tree that does not build is
+            # not retried with other settings. Questions that need it are scored incorrect (`index_failed`).
+            print(f"pageindex: {len(self.failed)} tree(s) failed to build: "
+                  + "; ".join(f"{d}: {e}" for d, e in sorted(self.failed.items())), file=sys.stderr, flush=True)
         return total
 
-    def _build_trees(self, store: Store, known: dict, indexer: str, total: IndexStats) -> None:
-        failed: dict[str, str] = {}
+    def _build_trees(self, store: Store, known: dict, failed: dict, indexer: str, total: IndexStats) -> None:
         for doc_id in sorted(store.docs):
             pdf = self.pdf_dir / f"{doc_id}.pdf"
             if not pdf.exists():
                 raise FileNotFoundError(f"pageindex: no PDF for document {doc_id!r} at {pdf}")
             sha = file_sha256(pdf)
+            if failed.get(doc_id, {}).get("sha256") == sha and failed[doc_id].get("indexer") == indexer:
+                continue   # failed under these exact settings before; temperature 0 and a fixed seed fail again
             # Trees built before the indexer setting existed carry none; they were built with the navigator.
             built_with = known.get(doc_id, {}).get("indexer", json.dumps(self._defaults(self.navigator), sort_keys=True))
             if known.get(doc_id, {}).get("sha256") != sha or built_with != indexer:
@@ -158,9 +172,11 @@ class PageIndexArm:
                 try:
                     with self._proxy.recording(ledger):
                         submitted = self._client.submit_document(str(pdf), metadata={"aex_doc_id": doc_id, "sha256": sha})
-                except Exception as exc:   # build every other tree first; the run still stops below
-                    failed[doc_id] = f"{type(exc).__name__}: {exc}"
+                except Exception as exc:   # the SDK's own error types; every other tree is still built
+                    failed[doc_id] = {"sha256": sha, "indexer": indexer, "error": f"{type(exc).__name__}: {exc}"}
+                    self._failed_file.write_text(json.dumps(failed, indent=1, sort_keys=True))
                     continue
+                failed.pop(doc_id, None)
                 known[doc_id] = {"sha256": sha, "pageindex_id": submitted["doc_id"], "indexer": indexer,
                                  "cost": {"input_tokens": ledger.input_tokens, "output_tokens": ledger.output_tokens,
                                           "gpu_s": ledger.gpu_s}}
@@ -171,9 +187,8 @@ class PageIndexArm:
             total.output_tokens += cost.get("output_tokens", 0)
             if cost.get("gpu_s") is not None:
                 total.gpu_s = (total.gpu_s or 0.0) + cost["gpu_s"]
-        if failed:
-            raise RuntimeError(f"pageindex: {len(failed)} tree(s) failed to build: "
-                               + "; ".join(f"{d}: {e}" for d, e in failed.items()))
+        self._failed_file.parent.mkdir(parents=True, exist_ok=True)
+        self._failed_file.write_text(json.dumps(failed, indent=1, sort_keys=True))
 
     # ── query ──
 
@@ -185,6 +200,11 @@ class PageIndexArm:
         """Run the SDK's agent over `doc_ids` (ours) and turn what it read or was shown into evidence."""
         global _active
         scope = [self._ids[d] for d in doc_ids if d in self._ids]
+        missing = [d for d in doc_ids if d in self.failed]
+        if not scope and missing:
+            trace = {"index_failed": missing, "reads": [], "pages": [], "doc_id": None, "visited": [],
+                     "backtracks": [], "selected": None, "native_answer": None}
+            return Retrieval([], trace, ledger, failure="index_failed")
         target = scope[0] if len(scope) == 1 else scope
         extra = getattr(self.navigator, "extra_body", None) or None
         reads: list[tuple[float, str, list[int]]] = []
@@ -202,6 +222,8 @@ class PageIndexArm:
                 _active = None
             shown, self._shown = self._shown, None
         evidence, trace = self._evidence_and_trace(reads, store, started, str(sdk_answer))
+        if missing:
+            trace["index_failed"] = missing   # the agent searched the other documents in scope
         if evidence:
             trace["answered_from"] = "pages"
         else:

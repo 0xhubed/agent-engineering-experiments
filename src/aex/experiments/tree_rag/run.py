@@ -142,6 +142,16 @@ def _evaluate_one(cfg: RunConfig, q: Question, arm, navigator: str, answerer_id:
                       "tokens_query": None, "tokens_index_amortised": amortised_tokens,
                       "cost_usd": None, "gpu_s": None, "failure": "not_applicable", "detail": detail}
 
+    if retrieval.failure:
+        # The method could not run for this question (e.g. its index failed to build): wrong, not excluded.
+        failed = row | {"correct": False, "judge": None, "evidence_recall": recall, "evidence_precision": precision,
+                        "wrong_doc": wrong_doc, "latency_s": None, "llm_calls_sequential": None, "tokens_query": None,
+                        "tokens_index_amortised": amortised_tokens, "cost_usd": None, "gpu_s": None,
+                        "failure": retrieval.failure, "detail": detail}
+        if "native_answer" in retrieval.trace:
+            return failed, failed | {"arm": f"{arm.name}_native", "answerer": navigator}
+        return failed
+
     parse_failure = any(not store.get(d).page(p).text.strip() for d, p in q.evidence)
     n = max(n_questions, 1)
     prices = {model: tuple(pair) for model, pair in cfg.prices.items()}
