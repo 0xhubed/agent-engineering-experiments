@@ -11,3 +11,7 @@ site-fixture/
 
 # Regenerated from the pinned FinanceBench source (CC-BY-NC); never committed
 gold/financebench.jsonl
+# Judge check: the queue and grade reasons carry FinanceBench question/gold text (never committed, decision D3).
+# Rebuild with `judge_review queue`; gold/judge_kappa.json (ids and numbers only) is committed.
+gold/review/judge_queue.jsonl
+gold/review/judge_grades*.jsonl

@@ -55,7 +55,9 @@ decisions D6/D7 are settled before the run; otherwise reported as not run.
   prompt revised on dev and re-measured. κ is reported. **Deviation from spec §6.3:** the grader is Claude (Opus 5.5),
   not Daniel (Daniel's decision, 2026-10-09), grading blind to the judge's verdict with a one-line reason per item
   (`gold/review/judge_grades.claude-opus-5.5.jsonl`). This measures agreement between two models, not with a
-  human; the article says so next to κ.
+  human; the article says so next to κ. **Result (dev, 2026-10-09):** κ = 0.895 on 120 answers (15 per arm incl.
+  `pageindex_native`), agreement 117/120; in all 3 disagreements the judge was stricter than the grader. The judge
+  prompt stays as it is (`gold/judge_kappa.json`).
 - **Secondary (spec §6.3):** evidence recall/precision against gold pages; wrong-document rate (regime A); latency
   p50/p95; sequential LLM calls per query; tokens (index amortised + query); GPU-seconds; failure class.
 - **Breakdowns:** regime; question type; pre/post 2026-08-05 issue date (the answerer's release); regime-A

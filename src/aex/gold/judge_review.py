@@ -102,7 +102,7 @@ def kappa_report(queue: list[dict], grades: dict[str, bool], *, grader: str = HU
     judge = [it["judge_correct"] for it in graded]
     kappa = cohen_kappa(human, judge)
     return {"grader": grader, "n": len(graded), "kappa": round(kappa, 3), "agreement": round(sum(h == j for h, j in zip(human, judge)) / len(graded), 3),
-            "human_correct": sum(human), "judge_correct": sum(judge), "threshold": KAPPA_THRESHOLD,
+            "grader_correct": sum(human), "judge_correct": sum(judge), "threshold": KAPPA_THRESHOLD,
             "passes": kappa >= KAPPA_THRESHOLD and len(graded) >= 100,
             "disagreements": [it["item_id"] for it, h in zip(graded, human) if h != it["judge_correct"]]}
 
