@@ -21,6 +21,7 @@ from aex.experiments.tree_rag.arms.base import IndexStats, Store, register
 from aex.experiments.tree_rag.parse import file_sha256
 from aex.experiments.tree_rag.types import EvidencePage, Question, Retrieval
 
+BUILD_ATTEMPTS = 3
 _lock = threading.Lock()
 _active: list[tuple[float, str, list[int]]] | None = None
 
@@ -163,17 +164,22 @@ class PageIndexArm:
             if not pdf.exists():
                 raise FileNotFoundError(f"pageindex: no PDF for document {doc_id!r} at {pdf}")
             sha = file_sha256(pdf)
-            if failed.get(doc_id, {}).get("sha256") == sha and failed[doc_id].get("indexer") == indexer:
-                continue   # failed under these exact settings before; temperature 0 and a fixed seed fail again
             # Trees built before the indexer setting existed carry none; they were built with the navigator.
             built_with = known.get(doc_id, {}).get("indexer", json.dumps(self._defaults(self.navigator), sort_keys=True))
             if known.get(doc_id, {}).get("sha256") != sha or built_with != indexer:
-                ledger = Ledger()
-                try:
-                    with self._proxy.recording(ledger):
-                        submitted = self._client.submit_document(str(pdf), metadata={"aex_doc_id": doc_id, "sha256": sha})
-                except Exception as exc:   # the SDK's own error types; every other tree is still built
-                    failed[doc_id] = {"sha256": sha, "indexer": indexer, "error": f"{type(exc).__name__}: {exc}"}
+                # The same settings can fail and then succeed (fb-johnson-johnson-2022-10k failed twice, then
+                # built): each build gets BUILD_ATTEMPTS tries before the document counts as failed.
+                errors = []
+                for _ in range(BUILD_ATTEMPTS):
+                    ledger = Ledger()
+                    try:
+                        with self._proxy.recording(ledger):
+                            submitted = self._client.submit_document(str(pdf), metadata={"aex_doc_id": doc_id, "sha256": sha})
+                        break
+                    except Exception as exc:   # the SDK's own error types; every other tree is still built
+                        errors.append(f"{type(exc).__name__}: {exc}")
+                else:
+                    failed[doc_id] = {"sha256": sha, "indexer": indexer, "error": errors[-1], "attempts": len(errors)}
                     self._failed_file.write_text(json.dumps(failed, indent=1, sort_keys=True))
                     continue
                 failed.pop(doc_id, None)

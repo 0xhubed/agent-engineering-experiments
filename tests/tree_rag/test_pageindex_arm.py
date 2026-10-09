@@ -300,16 +300,27 @@ def test_a_failed_tree_is_recorded_and_the_others_still_build(pdfs, tmp_path, mo
     assert "1 tree(s) failed to build: d1: RuntimeError: node dropped" in capsys.readouterr().err
 
 
-def test_a_tree_that_failed_under_the_same_settings_is_not_retried(pdfs, tmp_path, monkeypatch):
+def test_a_failed_build_is_retried_before_the_tree_counts_as_failed(pdfs, tmp_path, monkeypatch):
     calls = []
-    _arm(pdfs, tmp_path, monkeypatch).index(_store())     # d2 built; d1 too, under the fake's default submit
-    (tmp_path / "pi" / "aex-index.json").unlink()
     arm = _arm(pdfs, tmp_path, monkeypatch)
     _failing_d1(monkeypatch, calls)
     arm.index(_store())
+    assert calls == ["d1"] * pia.BUILD_ATTEMPTS + ["d2"]
+
+
+def test_a_flaky_build_succeeds_on_a_later_attempt(pdfs, tmp_path, monkeypatch):
     arm = _arm(pdfs, tmp_path, monkeypatch)
+    tries = []
+
+    def submit(self, path, metadata=None):
+        tries.append(metadata["aex_doc_id"])
+        if tries.count("d1") == 1 and metadata["aex_doc_id"] == "d1":
+            raise RuntimeError("node dropped")
+        return {"doc_id": f"pi-{metadata['aex_doc_id']}"}
+
+    monkeypatch.setattr(FakeClient, "submit_document", submit)
     arm.index(_store())
-    assert calls == ["d1", "d2"] and arm.failed == {"d1": "RuntimeError: node dropped"}
+    assert tries == ["d1", "d1", "d2"] and arm.failed == {} and set(arm._ids) == {"d1", "d2"}
 
 
 def test_a_question_whose_only_tree_failed_is_scored_wrong_without_an_answer(pdfs, tmp_path, monkeypatch):
