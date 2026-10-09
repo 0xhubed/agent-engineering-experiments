@@ -3,7 +3,10 @@ __pycache__/
 *.pyc
 .pytest_cache/
 data/
-runs/*.sqlite
+runs/**/*.sqlite
+runs/**/*.sqlite.manifest.json
+runs/**/*.log
+runs/dev-tuning/launch.sh
 runs/*/raw/
 *.pdf
 .env
