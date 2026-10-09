@@ -21,7 +21,7 @@ from aex.experiments.tree_rag.arms.base import IndexStats, Store, register
 from aex.experiments.tree_rag.parse import file_sha256
 from aex.experiments.tree_rag.types import EvidencePage, Question, Retrieval
 
-BUILD_ATTEMPTS = 3
+ATTEMPTS = 3
 _lock = threading.Lock()
 _active: list[tuple[float, str, list[int]]] | None = None
 
@@ -168,9 +168,9 @@ class PageIndexArm:
             built_with = known.get(doc_id, {}).get("indexer", json.dumps(self._defaults(self.navigator), sort_keys=True))
             if known.get(doc_id, {}).get("sha256") != sha or built_with != indexer:
                 # The same settings can fail and then succeed (fb-johnson-johnson-2022-10k failed twice, then
-                # built): each build gets BUILD_ATTEMPTS tries before the document counts as failed.
+                # built): each build gets ATTEMPTS tries before the document counts as failed.
                 errors = []
-                for _ in range(BUILD_ATTEMPTS):
+                for _ in range(ATTEMPTS):
                     ledger = Ledger()
                     try:
                         with self._proxy.recording(ledger):
@@ -218,18 +218,34 @@ class PageIndexArm:
         self._shown = []
         with _lock:
             _active = reads
+        gave_up = []
         try:
-            with self._proxy.recording(ledger):
-                sdk_answer = self._client.chat(q.question, doc_id=target, extra_body=extra)
-        except Exception as exc:  # the SDK raises its own error types; the runner retries LLMError rows
-            raise LLMError(f"pageindex: {type(exc).__name__}: {exc}") from exc
+            # The agent can run out of its default turn budget; the same settings can then finish (as a tree
+            # build can), so it gets ATTEMPTS tries. After that the method failed: scored, not retried.
+            for _ in range(ATTEMPTS):
+                reads.clear()
+                self._shown = []
+                try:
+                    with self._proxy.recording(ledger):
+                        sdk_answer = self._client.chat(q.question, doc_id=target, extra_body=extra)
+                    break
+                except Exception as exc:  # the SDK raises its own error types; the runner retries LLMError rows
+                    if "max_turns" not in str(exc):
+                        raise LLMError(f"pageindex: {type(exc).__name__}: {exc}") from exc
+                    gave_up.append(f"{type(exc).__name__}: {exc}")
         finally:
             with _lock:
                 _active = None
             shown, self._shown = self._shown, None
+        if len(gave_up) == ATTEMPTS:
+            trace = {"max_turns": gave_up, "reads": [], "pages": [], "doc_id": None, "visited": [],
+                     "backtracks": [], "selected": None, "native_answer": None}
+            return Retrieval([], trace, ledger, failure="max_turns")
         evidence, trace = self._evidence_and_trace(reads, store, started, str(sdk_answer))
         if missing:
             trace["index_failed"] = missing   # the agent searched the other documents in scope
+        if gave_up:
+            trace["max_turns"] = gave_up      # earlier attempts that ran out of turns
         if evidence:
             trace["answered_from"] = "pages"
         else:

@@ -76,7 +76,10 @@ decisions D6/D7 are settled before the run; otherwise reported as not run.
    settings, never with other settings; if all fail, questions that need only that document are scored incorrect for
    `pageindex`, `pageindex_native` and `vec_tree` (failure class `index_failed`), never excluded, and the count is
    reported. Dev: all 113 trees built; `fb-johnson-johnson-2022-10k` failed in two runs (an SDK error while
-   finalising its tree) and built in the third, so the failure is not deterministic.
+   finalising its tree) and built in the third, so the failure is not deterministic. Likewise, when the SDK's
+   agent runs out of its default turn budget (`max_turns`) it is retried up to 3 times under the same settings,
+   never with a larger budget; if all 3 run out, the question is scored incorrect (failure class `max_turns`) for
+   `pageindex`, `pageindex_native` and `vec_tree`. Retries' tokens and latency count toward the question's cost.
 2. Determinism check (plan 1c Task 3) before the test run; its outcome fixes the reproducibility criterion here,
    as an addendum committed before the test run.
 3. One full test-split run. `error` rows are rerun until none remain; `not_applicable` rows are reported, never

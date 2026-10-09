@@ -305,7 +305,7 @@ def test_a_failed_build_is_retried_before_the_tree_counts_as_failed(pdfs, tmp_pa
     arm = _arm(pdfs, tmp_path, monkeypatch)
     _failing_d1(monkeypatch, calls)
     arm.index(_store())
-    assert calls == ["d1"] * pia.BUILD_ATTEMPTS + ["d2"]
+    assert calls == ["d1"] * pia.ATTEMPTS + ["d2"]
 
 
 def test_a_flaky_build_succeeds_on_a_later_attempt(pdfs, tmp_path, monkeypatch):
@@ -343,3 +343,34 @@ def test_a_question_whose_only_tree_failed_is_scored_wrong_without_an_answer(pdf
     assert set(rows) == {"pageindex", "pageindex_native"} and not answered
     assert all(r["correct"] is False and r["failure"] == "index_failed" for r in rows.values())
     assert rows["pageindex"]["detail"]["trace"]["index_failed"] == ["d1"]
+
+
+def _turns(monkeypatch, fail_times):
+    calls = []
+    original = FakeClient.chat
+
+    def chat(self, question, doc_id=None, extra_body=None):
+        calls.append(question)
+        if len(calls) <= fail_times:
+            raise RuntimeError("The agent did not finish within max_turns (the default limit).")
+        return original(self, question, doc_id=doc_id, extra_body=extra_body)
+
+    monkeypatch.setattr(FakeClient, "chat", chat)
+    return calls
+
+
+def test_an_agent_out_of_turns_is_retried_then_answers(pdfs, tmp_path, monkeypatch):
+    arm = _arm(pdfs, tmp_path, monkeypatch)
+    arm.index(_store())
+    calls = _turns(monkeypatch, 1)
+    r = arm.retrieve(_q(), _store())
+    assert len(calls) == 2 and r.failure is None and r.evidence and len(r.trace["max_turns"]) == 1
+
+
+def test_an_agent_out_of_turns_every_time_is_a_scored_failure(pdfs, tmp_path, monkeypatch):
+    arm = _arm(pdfs, tmp_path, monkeypatch)
+    arm.index(_store())
+    calls = _turns(monkeypatch, 99)
+    r = arm.retrieve(_q(), _store())
+    assert len(calls) == pia.ATTEMPTS and r.failure == "max_turns" and r.evidence == []
+    assert "native_answer" in r.trace          # the runner writes a pageindex_native row too
