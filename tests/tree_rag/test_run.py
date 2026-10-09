@@ -147,3 +147,10 @@ def test_dgx_smoke_config_loads():
     assert cfg.max_answer_tokens >= 8192
     assert cfg.models[cfg.answerers[0]]["extra_body"]["chat_template_kwargs"]["reasoning_effort"] == "medium"
     assert cfg.models[cfg.judge]["extra_body"]["chat_template_kwargs"]["enable_thinking"] is False
+
+
+def test_shards_split_the_questions_without_overlap():
+    from aex.experiments.tree_rag.run import in_shard
+    qids = [f"q{n}" for n in range(200)]
+    parts = [{q for q in qids if in_shard(q, (i, 4))} for i in range(4)]
+    assert set().union(*parts) == set(qids) and sum(map(len, parts)) == 200 and all(parts)

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import hashlib
 import json
 import os
 import sys
@@ -198,8 +199,14 @@ def _gold_text(q: Question) -> str:
     return "; ".join(q.gold.value) if isinstance(q.gold.value, list) else str(q.gold.value)
 
 
+def in_shard(qid: str, shard: tuple[int, int]) -> bool:
+    i, k = shard
+    return int(hashlib.sha256(qid.encode()).hexdigest(), 16) % k == i
+
+
 def run_experiment(cfg: RunConfig, *, clients: dict[str, ChatClient], store: Store,
-                   questions: list[Question], checkpoint: Checkpoint, services: dict | None = None) -> None:
+                   questions: list[Question], checkpoint: Checkpoint, services: dict | None = None,
+                   shard: tuple[int, int] = (0, 1)) -> None:
     selected = [q for q in questions if q.split in cfg.splits]
     store = store.reachable(selected, cfg.scope)
 
@@ -215,7 +222,7 @@ def run_experiment(cfg: RunConfig, *, clients: dict[str, ChatClient], store: Sto
         navigators = cfg.navigators if probe.uses_navigator else ["none"]
         for navigator in navigators:
             todo = [(q, a) for q in selected for a in cfg.answerers
-                    if pending(row_key(q.qid, arm_name, navigator, a))]
+                    if in_shard(q.qid, shard) and pending(row_key(q.qid, arm_name, navigator, a))]
             if not todo:
                 continue
             arm = make_arm(arm_name, navigator=clients.get(navigator), **options) if probe.uses_navigator else probe
@@ -272,6 +279,8 @@ def main(argv: list[str]) -> int:
     ap.add_argument("config")
     ap.add_argument("--arms", help="comma-separated subset of the config's arms; processes running different "
                                    "subsets can share one checkpoint")
+    ap.add_argument("--shard", default="0/1", help="i/k: only questions whose qid hashes to i mod k, so k processes "
+                                                   "can split one arm; build its indexes first (shards would race)")
     args = ap.parse_args(argv[1:])
     cfg = RunConfig.from_yaml(args.config)
     only = args.arms.split(",") if args.arms else cfg.arms
@@ -288,8 +297,11 @@ def main(argv: list[str]) -> int:
     Path(f"{cfg.checkpoint}.manifest.json").write_text(
         json.dumps(manifest | {"manifest_hash": manifest_hash(manifest)}, indent=2))
     checkpoint = Checkpoint(cfg.checkpoint)
+    i, k = map(int, args.shard.split("/"))
+    if not 0 <= i < k:
+        raise SystemExit(f"bad --shard {args.shard!r}: need i/k with 0 <= i < k")
     run_experiment(replace(cfg, arms=[a for a in cfg.arms if a in only]), clients=clients, store=store, questions=questions, checkpoint=checkpoint,
-                   services=services)
+                   services=services, shard=(i, k))
     print(_summary(checkpoint.rows()))
     return 0
 
