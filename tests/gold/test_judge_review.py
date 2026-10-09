@@ -98,3 +98,9 @@ def test_grade_refuses_to_write_daniels_grades(tmp_path):
     (tmp_path / "judge_queue.jsonl").write_text(json.dumps({"item_id": "i0"}) + "\n")
     with pytest.raises(SystemExit):
         main(["jr", "grade", "i0", "correct", "--reason", "r", "--dir", str(tmp_path)])
+
+
+def test_native_rows_are_queued_with_the_full_prose_the_judge_saw():
+    long = "x" * 700
+    row = _row("q0", "pageindex_native") | {"detail": {"answer": long[:500], "raw": long}}
+    assert build_queue([row], [_q("q0")], n=1)[0]["answer"] == long

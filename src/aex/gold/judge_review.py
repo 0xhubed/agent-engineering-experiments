@@ -54,7 +54,10 @@ def build_queue(rows: list[dict], questions: list[Question], *, n: int = 120, se
     pools: dict[str, list[dict]] = defaultdict(list)
     for r in rows:
         q = by_qid.get(r["qid"])
-        answer = (r.get("detail") or {}).get("answer")
+        detail = r.get("detail") or {}
+        # Exactly what the judge graded: a native row's full prose (detail.answer keeps only 500 characters),
+        # otherwise the extracted final answer.
+        answer = detail.get("raw") if r["arm"].endswith("_native") else detail.get("answer")
         if (q is None or q.split != "dev" or r.get("judge") != "llm" or r.get("correct") is None
                 or r.get("failure") == "error" or not answer):
             continue
