@@ -47,8 +47,11 @@ decisions D6/D7 are settled before the run; otherwise reported as not run.
   golds. **Open until frozen:** whether a gold stated to fewer decimals (FinanceBench `0.01`, `0.8`) also accepts
   any answer within half a unit of its last digit (spec §6.3 "or the document's stated precision") — decided on the
   dev split, before freezing.
-- **Judge validity:** Cohen's κ between the judge and Daniel on ≥100 dev answers; κ < 0.7 → judge prompt revised on
-  dev and re-measured. κ is reported.
+- **Judge validity:** Cohen's κ between the judge and an independent grader on ≥100 dev answers; κ < 0.7 → judge
+  prompt revised on dev and re-measured. κ is reported. **Deviation from spec §6.3:** the grader is Claude (Opus 5.5),
+  not Daniel (Daniel's decision, 2026-10-09), grading blind to the judge's verdict with a one-line reason per item
+  (`gold/review/judge_grades.claude-opus-5.5.jsonl`). This measures agreement between two models, not with a
+  human; the article says so next to κ.
 - **Secondary (spec §6.3):** evidence recall/precision against gold pages; wrong-document rate (regime A); latency
   p50/p95; sequential LLM calls per query; tokens (index amortised + query); GPU-seconds; failure class.
 - **Breakdowns:** regime; question type; pre/post 2026-08-05 issue date (the answerer's release); regime-A

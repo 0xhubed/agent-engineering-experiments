@@ -3,13 +3,18 @@
 Usage:
   python -m aex.gold.judge_review queue configs/tree_rag/<dev-run>.yaml [--n 120]   # sample from a run
   python -m aex.gold.judge_review serve [--host 100.84.235.48] [--port 8766]        # grade on the phone
-  python -m aex.gold.judge_review kappa                                             # -> gold/judge_kappa.json
+  python -m aex.gold.judge_review kappa [--by daniel]                               # -> gold/judge_kappa.json
+
+  # Grading by a model instead (Daniel's decision, 2026-10-09: Claude grades, recorded as Claude's):
+  python -m aex.gold.judge_review blind --by claude-opus-5.5 [--n 10]   # next ungraded items, no judge verdict
+  python -m aex.gold.judge_review grade <item_id> correct|incorrect --by claude-opus-5.5 --reason "..."
 
 The queue holds answers the LLM judge graded (gold kind "free", plus native PageIndex answers), sampled
 evenly across arms. Grading is blind: the page shows the question, the gold answer and the model's
-answer, never the judge's verdict. Grades are appended to gold/review/judge_grades.jsonl (latest per
-item wins; Undo removes the last). kappa compares them with the judge's verdicts; below 0.7, adjust the
-judge prompt on dev and repeat (spec §6.3).
+answer, never the judge's verdict. Daniel's grades are appended to gold/review/judge_grades.jsonl, any
+other grader's to judge_grades.<by>.jsonl (latest per item wins; Undo removes the last). kappa compares
+one grader's grades with the judge's verdicts and names the grader; below 0.7, adjust the judge prompt on
+dev and repeat (spec §6.3).
 """
 from __future__ import annotations
 
@@ -32,6 +37,11 @@ from aex.gold.review_app import CSS, check_bind_address
 
 KAPPA_THRESHOLD = 0.7
 REVIEW_DIR = Path("gold/review")
+HUMAN = "daniel"
+
+
+def grades_file(review_dir: Path, by: str) -> Path:
+    return review_dir / ("judge_grades.jsonl" if by == HUMAN else f"judge_grades.{by}.jsonl")
 
 
 def item_id(row: dict) -> str:
@@ -81,14 +91,14 @@ def latest_grades(path: Path) -> dict[str, bool]:
     return grades
 
 
-def kappa_report(queue: list[dict], grades: dict[str, bool]) -> dict:
+def kappa_report(queue: list[dict], grades: dict[str, bool], *, grader: str = HUMAN) -> dict:
     graded = [it for it in queue if it["item_id"] in grades]
     if not graded:
         raise ValueError("no graded items yet")
     human = [grades[it["item_id"]] for it in graded]
     judge = [it["judge_correct"] for it in graded]
     kappa = cohen_kappa(human, judge)
-    return {"n": len(graded), "kappa": round(kappa, 3), "agreement": round(sum(h == j for h, j in zip(human, judge)) / len(graded), 3),
+    return {"grader": grader, "n": len(graded), "kappa": round(kappa, 3), "agreement": round(sum(h == j for h, j in zip(human, judge)) / len(graded), 3),
             "human_correct": sum(human), "judge_correct": sum(judge), "threshold": KAPPA_THRESHOLD,
             "passes": kappa >= KAPPA_THRESHOLD and len(graded) >= 100,
             "disagreements": [it["item_id"] for it, h in zip(graded, human) if h != it["judge_correct"]]}
@@ -111,7 +121,7 @@ class Grading:
         return min(open_, key=lambda it: (it["item_id"] in skipped, skipped.get(it["item_id"], 0),
                                           self.queue.index(it)))
 
-    def record(self, item: str, action: str) -> None:
+    def record(self, item: str, action: str, *, reason: str | None = None) -> None:
         with self.lock:
             if action == "skip":
                 if item in self.skipped:
@@ -122,8 +132,9 @@ class Grading:
                 raise ValueError(f"unknown action {action!r}")
             self.grades_path.parent.mkdir(parents=True, exist_ok=True)
             with open(self.grades_path, "a") as fh:
-                fh.write(json.dumps({"item_id": item, "action": action,
-                                     "at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}) + "\n")
+                entry = {"item_id": item, "action": action,
+                         "at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
+                fh.write(json.dumps(entry | ({"reason": reason} if reason else {})) + "\n")
 
 
 def _esc(s) -> str:
@@ -199,16 +210,19 @@ def _read_jsonl(path: Path) -> list[dict]:
 
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(prog="judge_review")
-    ap.add_argument("command", choices=["queue", "serve", "kappa"])
-    ap.add_argument("config", nargs="?")
-    ap.add_argument("--n", type=int, default=120)
+    ap.add_argument("command", choices=["queue", "serve", "kappa", "blind", "grade"])
+    ap.add_argument("config", nargs="?", help="queue: the dev run's config; grade: the item id")
+    ap.add_argument("action", nargs="?", choices=["correct", "incorrect"])
+    ap.add_argument("--by", default=HUMAN, help="who grades (the web page is always Daniel's)")
+    ap.add_argument("--reason")
+    ap.add_argument("--n", type=int, help="queue: sample size (120); blind: items shown (10)")
     ap.add_argument("--host", default="100.84.235.48")
     ap.add_argument("--port", type=int, default=8766)   # 8765 is the gold review app
     ap.add_argument("--dir", default=str(REVIEW_DIR))
     ap.add_argument("--out", default="gold/judge_kappa.json")
     args = ap.parse_args(argv[1:])
     review_dir = Path(args.dir)
-    queue_path, grades_path = review_dir / "judge_queue.jsonl", review_dir / "judge_grades.jsonl"
+    queue_path, grades_path = review_dir / "judge_queue.jsonl", grades_file(review_dir, args.by)
 
     if args.command == "queue":
         from aex.common.checkpoint import Checkpoint
@@ -218,7 +232,7 @@ def main(argv: list[str]) -> int:
             raise SystemExit("queue needs the dev run's config")
         cfg = RunConfig.from_yaml(args.config)
         queue = build_queue(Checkpoint(cfg.checkpoint).rows(),
-                            load_questions(cfg.gold, seed=cfg.seed, dev_fraction=cfg.dev_fraction), n=args.n,
+                            load_questions(cfg.gold, seed=cfg.seed, dev_fraction=cfg.dev_fraction), n=args.n or 120,
                             seed=cfg.seed)
         review_dir.mkdir(parents=True, exist_ok=True)
         queue_path.write_text("".join(json.dumps(it, ensure_ascii=False) + "\n" for it in queue))
@@ -226,14 +240,30 @@ def main(argv: list[str]) -> int:
         return 0
 
     queue = _read_jsonl(queue_path)
+    if args.command == "blind":
+        done = latest_grades(grades_path)
+        for it in [it for it in queue if it["item_id"] not in done][:args.n or 10]:
+            print(json.dumps({k: it[k] for k in ("item_id", "question", "gold", "answer")}, ensure_ascii=False))
+        print(f"# {len(done)}/{len(queue)} graded by {args.by}")
+        return 0
+    if args.command == "grade":
+        if args.by == HUMAN:
+            raise SystemExit("Daniel grades on the web page; pass --by for any other grader")
+        if args.config not in {it["item_id"] for it in queue} or not args.action or not (args.reason or "").strip():
+            raise SystemExit("grade needs a queued item id, correct|incorrect and --reason")
+        Grading(queue, grades_path).record(args.config, args.action, reason=args.reason.strip())
+        print(f"{args.config}: {args.action}")
+        return 0
     if args.command == "serve":
+        if args.by != HUMAN:
+            raise SystemExit("the grading page records Daniel's grades only")
         check_bind_address(args.host)
         server = ThreadingHTTPServer((args.host, args.port), make_handler(Grading(queue, grades_path)))
         print(f"judge check on http://{args.host}:{args.port}/ ({len(queue)} items)", flush=True)
         server.serve_forever()
         return 0
 
-    report = kappa_report(queue, latest_grades(grades_path))
+    report = kappa_report(queue, latest_grades(grades_path), grader=args.by)
     Path(args.out).write_text(json.dumps(report, indent=1) + "\n")
     print(json.dumps({k: v for k, v in report.items() if k != "disagreements"}))
     return 0 if report["passes"] else 1

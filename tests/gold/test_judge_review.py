@@ -66,3 +66,35 @@ def test_grading_page_is_blind_and_records(tmp_path):
             urllib.request.urlopen(base + "/grade", data=b"item_id=nope&action=correct")
     finally:
         server.shutdown()
+
+
+def test_a_model_grader_gets_its_own_file_and_is_named_in_the_report(tmp_path):
+    from aex.gold.judge_review import main
+    queue = [{"item_id": f"i{n}", "qid": f"q{n}", "arm": "a", "question": "Q?", "gold": "g", "answer": "x",
+              "judge_correct": n % 2 == 0} for n in range(4)]
+    (tmp_path / "judge_queue.jsonl").write_text("".join(json.dumps(it) + "\n" for it in queue))
+    by = ["--by", "claude-opus-5.5", "--dir", str(tmp_path)]
+    for n in range(4):
+        assert main(["jr", "grade", f"i{n}", "correct" if n % 2 == 0 else "incorrect", "--reason", "r", *by]) == 0
+    assert not (tmp_path / "judge_grades.jsonl").exists()
+    lines = (tmp_path / "judge_grades.claude-opus-5.5.jsonl").read_text().splitlines()
+    assert len(lines) == 4 and json.loads(lines[0])["reason"] == "r"
+    main(["jr", "kappa", *by, "--out", str(tmp_path / "k.json")])
+    report = json.loads((tmp_path / "k.json").read_text())
+    assert report["grader"] == "claude-opus-5.5" and report["kappa"] == 1.0 and not report["passes"]   # n < 100
+
+
+def test_blind_view_never_shows_the_judge_verdict(tmp_path, capsys):
+    from aex.gold.judge_review import main
+    it = {"item_id": "i0", "qid": "q0", "arm": "a", "question": "Q?", "gold": "g", "answer": "x", "judge_correct": True}
+    (tmp_path / "judge_queue.jsonl").write_text(json.dumps(it) + "\n")
+    main(["jr", "blind", "--by", "claude-opus-5.5", "--dir", str(tmp_path)])
+    out = capsys.readouterr().out
+    assert '"i0"' in out and "judge_correct" not in out
+
+
+def test_grade_refuses_to_write_daniels_grades(tmp_path):
+    from aex.gold.judge_review import main
+    (tmp_path / "judge_queue.jsonl").write_text(json.dumps({"item_id": "i0"}) + "\n")
+    with pytest.raises(SystemExit):
+        main(["jr", "grade", "i0", "correct", "--reason", "r", "--dir", str(tmp_path)])
