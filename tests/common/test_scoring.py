@@ -29,6 +29,12 @@ def test_non_refusal():
     ("65%", "65%"),
     ("0.65", "65%"),
     ("USD 99.6", "100"),          # within 0.5% relative
+    ("EUR 40,00", "EUR 40.00"),   # German decimal comma
+    ("EUR 100,00 je Wertpapier", "EUR 100"),
+    ("500.000", "500,000"),       # German thousands dot: ambiguous, both readings accepted
+    ("4.625", "4.625"),
+    ("1.000.000", "1000000"),
+    ("2,5 %", "2.5%"),
 ])
 def test_numeric_equivalences(answer, gold):
     assert score(answer, GoldAnswer("numeric", gold)).correct is True
@@ -46,6 +52,15 @@ def test_dates_all_formats():
     want = date(2027, 6, 15)
     for s in ["2027-06-15", "15.06.2027", "15/06/2027", "15 June 2027", "June 15, 2027", "15-Jun-2027"]:
         assert parse_dates(s) == [want], s
+
+
+def test_german_and_dotted_day_month_names():
+    assert parse_dates("11. Februar 2028") == [date(2028, 2, 11)]
+    assert parse_dates("25. September 2028 (or the next following trading day)") == [date(2028, 9, 25)]
+    assert parse_dates("3 März 2027; 1. Mai 2027; 9. december 2027") == [date(2027, 3, 3), date(2027, 5, 1),
+                                                                           date(2027, 12, 9)]
+    assert parse_dates("Jänner 2027") == []          # no day: not a date
+    assert score("11. Februar 2028", GoldAnswer("date", "2028-02-11")).correct is True
 
 
 def test_date_and_date_list():
@@ -74,3 +89,25 @@ def test_refusal_on_answerable_question_is_wrong_without_failure_label():
 def test_free_text_defers_to_judge():
     r = score("some prose", GoldAnswer("free", "reference prose"))
     assert r.correct is None and r.method == "llm"
+
+
+def test_unambiguous_separators_keep_one_reading():
+    assert parse_numbers("EUR 40,00") == {40.0}
+    assert parse_numbers("4.62") == {4.62}
+    assert parse_numbers("1,000.00") == {1000.0}
+    assert score("EUR 40,00", GoldAnswer("numeric", "4000")).correct is False
+    assert score("10.875% of the Denomination", GoldAnswer("numeric", "CHF 108.57")).correct is False
+
+
+def test_abbreviated_months():
+    assert parse_dates("01 Apr 2027, 01 Jul 2027, 01 Oct 2027, 03 Jan 2028") == [
+        date(2027, 4, 1), date(2027, 7, 1), date(2027, 10, 1), date(2028, 1, 3)]
+    assert parse_dates("8. Okt. 2027") == [date(2027, 10, 8)]
+
+
+def test_exact_allows_a_trailing_qualifier_only():
+    gold = GoldAnswer("exact", "Deutsche Bank AG")
+    assert score("Deutsche Bank AG, Taunusanlage 12, 60325 Frankfurt am Main", gold).correct is True
+    assert score("Austrian law (österreichisches Recht)", GoldAnswer("exact", "Austrian law")).correct is True
+    assert score("Deutsche Bank AG London Branch", gold).correct is False
+    assert score("Not Deutsche Bank AG", gold).correct is False

@@ -33,11 +33,18 @@ _REFUSAL = re.compile(
 _CURRENCY = re.compile(r"\b(?:CHF|EUR|USD|GBP|JPY)\b|[$€£]", re.IGNORECASE)
 _NUMBER = re.compile(r"[-+]?\d[\d.,]*\s*%?")
 _MONTHS = "January|February|March|April|May|June|July|August|September|October|November|December"
+# English and German month names (the Deutsche Bank final terms are German): "11. Februar 2028", "15 June 2027".
+_MONTH_NUMBER = {name.casefold(): n for n, names in enumerate([
+    ("January", "Januar", "Jänner", "Jan"), ("February", "Februar", "Feb"), ("March", "März", "Maerz", "Mar", "Mär"),
+    ("April", "Apr"), ("May", "Mai"), ("June", "Juni", "Jun"), ("July", "Juli", "Jul"), ("August", "Aug"),
+    ("September", "Sept", "Sep"), ("October", "Oktober", "Oct", "Okt"), ("November", "Nov"),
+    ("December", "Dezember", "Dec", "Dez")], 1) for name in names}
+_DAY_MONTH_YEAR = re.compile(r"\b(\d{1,2})\.? (" + "|".join(sorted(_MONTH_NUMBER, key=len, reverse=True))
+                             + r")\.? (\d{4})\b", re.IGNORECASE)
 _DATE_PATTERNS: list[tuple[re.Pattern, str]] = [
     (re.compile(r"\b\d{4}-\d{2}-\d{2}\b"), "%Y-%m-%d"),
     (re.compile(r"\b\d{1,2}\.\d{1,2}\.\d{4}\b"), "%d.%m.%Y"),
     (re.compile(r"\b\d{1,2}/\d{1,2}/\d{4}\b"), "%d/%m/%Y"),
-    (re.compile(rf"\b\d{{1,2}} (?:{_MONTHS}) \d{{4}}\b"), "%d %B %Y"),
     (re.compile(rf"\b(?:{_MONTHS}) \d{{1,2}}, \d{{4}}\b"), "%B %d, %Y"),
     (re.compile(r"\b\d{1,2}-[A-Z][a-z]{2}-\d{4}\b"), "%d-%b-%Y"),
 ]
@@ -55,13 +62,24 @@ def is_refusal(answer: str) -> bool:
     return bool(_REFUSAL.search(answer))
 
 
-def _to_float(raw: str) -> float:
-    raw = raw.strip()
-    if re.fullmatch(r"[-+]?\d{1,3}(?:\.\d{3})+,\d+", raw):      # European 1.000,50
-        raw = raw.replace(".", "").replace(",", ".")
-    else:
-        raw = raw.replace(",", "")
-    return float(raw.rstrip("."))
+def _readings(raw: str, *, percent: bool = False) -> set[float]:
+    """Every value the token can mean. English and German separators both occur in the corpus: the last of
+    two different separators is the decimal one; a lone separator followed by 1-2 or 4+ digits is decimal;
+    a lone one followed by exactly 3 digits ("500.000", "1,000") is ambiguous and yields both readings, except
+    in a percentage ("10.875%"), which never has thousands."""
+    raw = raw.strip().rstrip(".,")
+    seps = [c for c in raw if c in ",."]
+    if not seps:
+        return {float(raw)}
+    if len(set(seps)) == 2:
+        dec = seps[-1]
+        return {float(raw.replace("," if dec == "." else ".", "").replace(",", "."))}
+    sep = seps[0]
+    head, *groups = raw.split(sep)
+    if len(groups) > 1:                                              # 1.000.000 / 1,000,000
+        return {float(raw.replace(sep, ""))}
+    decimal = float(f"{head}.{groups[0]}")
+    return {decimal, float(head + groups[0])} if len(groups[0]) == 3 and not percent else {decimal}
 
 
 def parse_numbers(s: str) -> set[float] | None:
@@ -73,8 +91,8 @@ def parse_numbers(s: str) -> set[float] | None:
         return None
     token = match.group(0)
     is_pct = token.rstrip().endswith("%")
-    value = _to_float(token.replace("%", ""))
-    return {value, value / 100} if is_pct else {value}
+    values = _readings(token.replace("%", ""), percent=is_pct)
+    return values | {v / 100 for v in values} if is_pct else values
 
 
 def parse_dates(s: str) -> list[date]:
@@ -85,6 +103,11 @@ def parse_dates(s: str) -> list[date]:
                 found.append((m.start(), datetime.strptime(m.group(0), fmt).date()))
             except ValueError:
                 continue
+    for m in _DAY_MONTH_YEAR.finditer(s):
+        try:
+            found.append((m.start(), date(int(m.group(3)), _MONTH_NUMBER[m.group(2).casefold()], int(m.group(1)))))
+        except ValueError:
+            continue
     found.sort(key=lambda pair: pair[0])
     return [d for _, d in found]
 
@@ -113,7 +136,9 @@ def score(answer_text: str, gold: GoldAnswer, *, rel_tol: float = 0.005) -> Scor
     if gold.kind == "free":
         return ScoreResult(None, "llm", None)
     if gold.kind == "exact":
-        return ScoreResult(_norm_text(answer) == _norm_text(str(gold.value)), "exact", None)
+        # The gold may be followed by a qualifier: "Deutsche Bank AG, Taunusanlage 12, …", "Austrian law (…)".
+        a, g = _norm_text(answer), _norm_text(str(gold.value))
+        return ScoreResult(a == g or bool(re.match(re.escape(g) + r"(?:\s*[,(;]|\s+[–-]\s)", a)), "exact", None)
     if gold.kind == "numeric":
         a, g = parse_numbers(answer), parse_numbers(str(gold.value))
         return ScoreResult(bool(a and g and _numbers_match(a, g, rel_tol)), "numeric", None)

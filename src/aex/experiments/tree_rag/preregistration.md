@@ -44,7 +44,11 @@ decisions D6/D7 are settled before the run; otherwise reported as not run.
   10,000-resample paired bootstrap. A difference is a "win" only if its CI excludes 0; otherwise "no detectable
   difference at n = …".
 - **Scoring:** exact match for identifiers and dates; numbers within ±0.5% relative; LLM judge only for free-text
-  golds. **Open until frozen:** whether a gold stated to fewer decimals (FinanceBench `0.01`, `0.8`) also accepts
+  golds. Answers are read in English and German forms (the Deutsche Bank final terms are German): dates such as
+  "11. Februar 2028" or "01 Apr 2027"; decimal commas ("EUR 40,00"); a lone separator before exactly three digits
+  ("500.000") accepts both readings, except in a percentage; an exact gold may be followed by a comma clause or a
+  bracketed qualifier ("Deutsche Bank AG, Taunusanlage 12, …"). Found on dev (2026-10-09), where the old scorer
+  marked 77 correct answers wrong across all arms; stored answers were rescored (`tree_rag.rescore`), not rerun. **Open until frozen:** whether a gold stated to fewer decimals (FinanceBench `0.01`, `0.8`) also accepts
   any answer within half a unit of its last digit (spec §6.3 "or the document's stated precision") — decided on the
   dev split, before freezing.
 - **Judge validity:** Cohen's κ between the judge and an independent grader on ≥100 dev answers; κ < 0.7 → judge

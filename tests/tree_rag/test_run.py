@@ -154,3 +154,24 @@ def test_shards_split_the_questions_without_overlap():
     qids = [f"q{n}" for n in range(200)]
     parts = [{q for q in qids if in_shard(q, (i, 4))} for i in range(4)]
     assert set().union(*parts) == set(qids) and sum(map(len, parts)) == 200 and all(parts)
+
+
+def test_rescore_changes_only_deterministic_rows_and_keeps_the_old_verdict():
+    from aex.common.scoring import GoldAnswer
+    from aex.experiments.tree_rag.arms import Store
+    from aex.experiments.tree_rag.rescore import rescore
+    from aex.experiments.tree_rag.types import Page, ParsedDoc, Question
+    store = Store([ParsedDoc("d1", "Doc", "sha", (Page(1, "text"),), ())])
+    qs = {"q1": Question("q1", "ts", "A", "lookup", "Final fixing?", ("d1",), GoldAnswer("date", "2028-02-11"),
+                         (("d1", 1),), "dev"),
+          "q2": Question("q2", "ts", "A", "lookup", "Why?", ("d1",), GoldAnswer("free", "because"), (("d1", 1),), "dev")}
+    base = {"arm": "a", "navigator": "none", "answerer": "x", "evidence_recall": 1.0, "wrong_doc": False}
+    rows = [base | {"qid": "q1", "correct": False, "judge": "date", "failure": "right_evidence_wrong_answer",
+                    "detail": {"raw": "ANSWER: 11. Februar 2028"}},
+            base | {"qid": "q2", "correct": False, "judge": "llm", "failure": "x", "detail": {"raw": "ANSWER: no"}},
+            base | {"qid": "q1", "correct": None, "judge": None, "failure": "error", "detail": {"raw": None}}]
+    changed = rescore(rows, qs, store)
+    assert len(changed) == 1
+    row = changed[0]
+    assert row["correct"] is True and row["failure"] is None
+    assert row["detail"]["rescored"][0]["correct"] is False
