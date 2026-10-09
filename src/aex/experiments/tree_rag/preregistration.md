@@ -1,7 +1,7 @@
 # Tree RAG, phase 1 — pre-registration
 
-**Status: DRAFT — not frozen.** Freezing = the commit that adds Daniel's predictions (§6) and removes this line.
-That commit must predate the first test-split run (`git log` is the evidence; the article footer shows its hash).
+**Status: DRAFT — not frozen.** Freezing = the commit that removes this line, made after dev tuning (§5.1) and
+before the first test-split run (`git log` is the evidence; the article footer shows its hash).
 
 ## 1. Hypotheses (spec §2.1, verbatim)
 
@@ -48,9 +48,10 @@ decisions D6/D7 are settled before the run; otherwise reported as not run.
   "11. Februar 2028" or "01 Apr 2027"; decimal commas ("EUR 40,00"); a lone separator before exactly three digits
   ("500.000") accepts both readings, except in a percentage; an exact gold may be followed by a comma clause or a
   bracketed qualifier ("Deutsche Bank AG, Taunusanlage 12, …"). Found on dev (2026-10-09), where the old scorer
-  marked 77 correct answers wrong across all arms; stored answers were rescored (`tree_rag.rescore`), not rerun. **Open until frozen:** whether a gold stated to fewer decimals (FinanceBench `0.01`, `0.8`) also accepts
-  any answer within half a unit of its last digit (spec §6.3 "or the document's stated precision") — decided on the
-  dev split, before freezing.
+  marked 77 correct answers wrong across all arms; stored answers were rescored (`tree_rag.rescore`), not rerun. Numbers also match when within half a unit of the gold's last stated digit (spec §6.3 "or the document's
+  stated precision"): a gold rounded to fewer decimals, such as FinanceBench's "0.8" or "0.01", accepts the
+  unrounded value ("0.83", "0.0137"); a gold with two decimals ("$4.60") gains nothing from it. Decided before
+  freezing on principle, not on results: on dev it changes no row (2026-10-09, `rescore --dry-run`).
 - **Judge validity:** Cohen's κ between the judge and an independent grader on ≥100 dev answers; κ < 0.7 → judge
   prompt revised on dev and re-measured. κ is reported. **Deviation from spec §6.3:** the grader is Claude (Opus 5.5),
   not Daniel (Daniel's decision, 2026-10-09), grading blind to the judge's verdict with a one-line reason per item
@@ -92,12 +93,24 @@ decisions D6/D7 are settled before the run; otherwise reported as not run.
    scored. No test question is inspected individually before the run completes.
 4. Reproduction of 20 random test questions × all arms from a clean checkout, by the criterion from step 2.
 
-## 6. Predicted ordering (Daniel — written before any test result)
+## 6. Predicted ordering
 
-> **TO BE WRITTEN BY DANIEL (decision D5).** For each of regime A, regime B and the claim check: the expected order
-> of the six arms by accuracy, and optionally the expected size of the gap between `pageindex` and
-> `hybrid_rerank`. The article shows these next to the observed results.
+**Deviation from spec (decision D5):** the predictions were to be Daniel's, written before any result. Daniel
+delegated them to Claude (2026-10-09), so they are **Claude's (Opus 5.5), written after the dev run** and informed
+by it. They are a forecast from dev, not a blind prior; the article labels them so and does not present them as
+the author's expectations. Dev accuracy (n per arm in brackets) is given beside each, as the basis. Dev is small
+outside regime A; a test result that departs from it is plausible, not a surprise.
 
-- Regime A:
-- Regime B:
-- Claim check (FinanceBench):
+- **Regime A:** `long_context` > `pageindex` > `raptor` > `vec_tree` ≈ `hybrid_rerank` > `chunk_embed`.
+  `pageindex` − `hybrid_rerank` ≈ +40 points, CI excluding 0. Dev (144): long_context 1.00 (142 applicable),
+  pageindex 0.83, raptor 0.51, vec_tree 0.43, hybrid_rerank 0.40, chunk_embed 0.32.
+- **Regime B:** `long_context` ≈ `pageindex` ≈ `hybrid_rerank` > `vec_tree` > `raptor` > `chunk_embed`.
+  `pageindex` − `hybrid_rerank` ≈ 0: no detectable difference. Dev (38): long_context 0.90 (30 applicable),
+  pageindex 0.89, hybrid_rerank 0.89, vec_tree 0.82, raptor 0.63, chunk_embed 0.58.
+- **Claim check (FinanceBench):** `long_context` ≥ `pageindex` > `raptor` ≈ `vec_tree` > `hybrid_rerank` >
+  `chunk_embed`. `pageindex` − `hybrid_rerank` ≈ +15 to +25 points. Unlike the §1 prediction, the tuned hybrid
+  does not close most of the gap. Dev (32): long_context 0.77 (30 applicable), pageindex 0.72, raptor 0.66,
+  vec_tree 0.66, hybrid_rerank 0.50, chunk_embed 0.47.
+
+Dev tuning may move these; if a tuned arm's dev accuracy changes its place, the prediction is revised in the
+tuning commit, before freezing, and the revision is visible in `git log`.

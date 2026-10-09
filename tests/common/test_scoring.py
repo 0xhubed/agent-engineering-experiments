@@ -111,3 +111,18 @@ def test_exact_allows_a_trailing_qualifier_only():
     assert score("Austrian law (österreichisches Recht)", GoldAnswer("exact", "Austrian law")).correct is True
     assert score("Deutsche Bank AG London Branch", gold).correct is False
     assert score("Not Deutsche Bank AG", gold).correct is False
+
+
+@pytest.mark.parametrize("answer,gold,ok", [
+    ("0.83", "0.8", True),        # gold rounded to one decimal: within half a unit of its last digit
+    ("0.0137", "0.01", True),
+    ("0.86", "0.8", False),
+    ("0.016", "0.01", False),
+    ("4.625", "$4.60", False),    # two stated decimals: half a unit is 0.005
+    ("262.4", "EUR 262", True),
+    ("264", "EUR 262", False),
+    ("11.504%", "11.50%", True),
+    ("0.1158", "11.50%", False),
+])
+def test_numeric_stated_precision(answer, gold, ok):
+    assert score(answer, GoldAnswer("numeric", gold)).correct is ok

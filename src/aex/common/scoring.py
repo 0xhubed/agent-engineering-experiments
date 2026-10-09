@@ -62,29 +62,29 @@ def is_refusal(answer: str) -> bool:
     return bool(_REFUSAL.search(answer))
 
 
-def _readings(raw: str, *, percent: bool = False) -> set[float]:
-    """Every value the token can mean. English and German separators both occur in the corpus: the last of
-    two different separators is the decimal one; a lone separator followed by 1-2 or 4+ digits is decimal;
-    a lone one followed by exactly 3 digits ("500.000", "1,000") is ambiguous and yields both readings, except
-    in a percentage ("10.875%"), which never has thousands."""
+def _readings(raw: str, *, percent: bool = False) -> dict[float, int]:
+    """Every value the token can mean, each with its number of stated decimals. English and German separators
+    both occur in the corpus: the last of two different separators is the decimal one; a lone separator followed
+    by 1-2 or 4+ digits is decimal; a lone one followed by exactly 3 digits ("500.000", "1,000") is ambiguous and
+    yields both readings, except in a percentage ("10.875%"), which never has thousands."""
     raw = raw.strip().rstrip(".,")
     seps = [c for c in raw if c in ",."]
     if not seps:
-        return {float(raw)}
+        return {float(raw): 0}
     if len(set(seps)) == 2:
         dec = seps[-1]
-        return {float(raw.replace("," if dec == "." else ".", "").replace(",", "."))}
+        return {float(raw.replace("," if dec == "." else ".", "").replace(",", ".")): len(raw.rsplit(dec, 1)[1])}
     sep = seps[0]
     head, *groups = raw.split(sep)
     if len(groups) > 1:                                              # 1.000.000 / 1,000,000
-        return {float(raw.replace(sep, ""))}
-    decimal = float(f"{head}.{groups[0]}")
-    return {decimal, float(head + groups[0])} if len(groups[0]) == 3 and not percent else {decimal}
+        return {float(raw.replace(sep, "")): 0}
+    decimal = {float(f"{head}.{groups[0]}"): len(groups[0])}
+    return decimal | {float(head + groups[0]): 0} if len(groups[0]) == 3 and not percent else decimal
 
 
-def parse_numbers(s: str) -> set[float] | None:
+def _number_readings(s: str) -> dict[float, int] | None:
     cleaned = _CURRENCY.sub("", s)
-    for sep in ("'", "’", " ", " "):
+    for sep in ("'", "’", " ", " "):
         cleaned = cleaned.replace(sep, "")
     match = _NUMBER.search(cleaned)
     if not match:
@@ -92,7 +92,12 @@ def parse_numbers(s: str) -> set[float] | None:
     token = match.group(0)
     is_pct = token.rstrip().endswith("%")
     values = _readings(token.replace("%", ""), percent=is_pct)
-    return values | {v / 100 for v in values} if is_pct else values
+    return values | {v / 100: d + 2 for v, d in values.items()} if is_pct else values
+
+
+def parse_numbers(s: str) -> set[float] | None:
+    readings = _number_readings(s)
+    return set(readings) if readings is not None else None
 
 
 def parse_dates(s: str) -> list[date]:
@@ -112,12 +117,16 @@ def parse_dates(s: str) -> list[date]:
     return [d for _, d in found]
 
 
-def _numbers_match(a: set[float], g: set[float], rel_tol: float) -> bool:
+def _numbers_match(a: set[float], g: dict[float, int], rel_tol: float) -> bool:
+    """Within rel_tol of the gold, or within half a unit of the gold's last stated digit: a gold rounded to
+    fewer decimals ("0.8", FinanceBench's "0.01") accepts the unrounded value ("0.83", "0.0137")."""
     for x in a:
-        for y in g:
+        for y, decimals in g.items():
             if y == 0 and abs(x) < 1e-9:
                 return True
             if y != 0 and abs(x - y) <= rel_tol * abs(y):
+                return True
+            if abs(x - y) <= 0.5 * 10 ** -decimals * (1 + 1e-9):
                 return True
     return False
 
@@ -140,7 +149,7 @@ def score(answer_text: str, gold: GoldAnswer, *, rel_tol: float = 0.005) -> Scor
         a, g = _norm_text(answer), _norm_text(str(gold.value))
         return ScoreResult(a == g or bool(re.match(re.escape(g) + r"(?:\s*[,(;]|\s+[–-]\s)", a)), "exact", None)
     if gold.kind == "numeric":
-        a, g = parse_numbers(answer), parse_numbers(str(gold.value))
+        a, g = parse_numbers(answer), _number_readings(str(gold.value))
         return ScoreResult(bool(a and g and _numbers_match(a, g, rel_tol)), "numeric", None)
     if gold.kind == "date":
         a, g = parse_dates(answer), parse_dates(str(gold.value))
