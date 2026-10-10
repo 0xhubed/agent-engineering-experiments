@@ -90,6 +90,29 @@ decisions D6/D7 are settled before the run; otherwise reported as not run.
    `pageindex`, `pageindex_native` and `vec_tree`. Retries' tokens and latency count toward the question's cost.
 2. Determinism check (plan 1c Task 3) before the test run; its outcome fixes the reproducibility criterion here,
    as an addendum committed before the test run.
+
+   **Addendum (2026-10-10, before the test run).** Two runs of the frozen settings, started at the same time,
+   20 dev questions (`--shard 0/11`) × all 8 arms (`configs/tree_rag/determinism-{a,b}.yaml`,
+   `runs/determinism-compare.json`). Of 160 row pairs, 6.9% have identical answer text, 91.9% the same verdict
+   (`correct`), 71.9% the same evidence pages, 66.2% both. The server is not deterministic at temperature 0
+   under concurrent load: `long_context` and `oracle`, whose evidence is fixed, still change verdict on 1–2 of
+   20 rows. Query embeddings vary in the 4th decimal, which reorders near-tied passages (evidence agreement:
+   `raptor` 45%, `pageindex`/`vec_tree` 50%, `chunk_embed` 100%). Verdict flips are unbiased (7 wrong→right,
+   6 right→wrong) and cluster on judge-graded questions: 9 of 49 LLM-judged rows flipped vs 4 of 111 rule-scored
+   rows; 6 of the 13 flips are one FinanceBench free-text question on which the judge's verdict varied.
+   Decisions:
+   - **Concurrency stays as tuned.** Concurrency 1 would take about 8 days for the ~6,800 test rows (dev rows
+     average ~100 s each) and was not shown to remove the noise (embedding drift and the judge are separate
+     calls).
+   - **Reproducibility criterion (step 4):** the rerun matches the full run on `correct` for **≥ 80%** of shared
+     rows. 80% is the 1st percentile of agreement for 20 questions resampled by question (10,000 resamples,
+     seed 17) from this check, so an intact pipeline fails by chance about 1 time in 100. Identical text and
+     evidence pages are reported, not required.
+   - **Run noise in the results.** The paired bootstrap treats each verdict as fixed, so it leaves out run-to-run
+     noise. From the flip rates above (3.6% rule-scored, 18% judge-graded, 8.1% overall), the 95% half-width of
+     that noise on a paired difference is about 2 points overall, 2 in regime A, 3 in regime B and 8 on
+     FinanceBench. A "win" whose CI excludes 0 by less than that half-width is reported as **fragile**; the
+     primary rule (§3) is unchanged. The article reports the flip rates.
 3. One full test-split run. `error` rows are rerun until none remain; `not_applicable` rows are reported, never
    scored. No test question is inspected individually before the run completes.
 4. Reproduction of 20 random test questions × all arms from a clean checkout, by the criterion from step 2.
