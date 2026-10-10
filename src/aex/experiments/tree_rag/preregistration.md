@@ -79,7 +79,8 @@ decisions D6/D7 are settled before the run; otherwise reported as not run.
 ## 5. Procedure and exclusions
 
 1. Dev tuning: each arm ≤5 configurations, chosen by dev accuracy, log committed (`runs/dev-tuning.md`). PageIndex
-   runs its released defaults only. A PageIndex tree that fails to build is retried up to 3 times under the same
+   runs its released defaults only. Chosen (2026-10-10), frozen in `configs/tree_rag/phase1.yaml`: `chunk_embed`
+   and `hybrid_rerank` k 45 (the 9,000-word evidence budget), `raptor` 9,000 words, `vec_tree` 8 documents. A PageIndex tree that fails to build is retried up to 3 times under the same
    settings, never with other settings; if all fail, questions that need only that document are scored incorrect for
    `pageindex`, `pageindex_native` and `vec_tree` (failure class `index_failed`), never excluded, and the count is
    reported. Dev: all 113 trees built; `fb-johnson-johnson-2022-10k` failed in two runs (an SDK error while
@@ -101,16 +102,19 @@ by it. They are a forecast from dev, not a blind prior; the article labels them 
 the author's expectations. Dev accuracy (n per arm in brackets) is given beside each, as the basis. Dev is small
 outside regime A; a test result that departs from it is plausible, not a surprise.
 
-- **Regime A:** `long_context` > `pageindex` > `raptor` > `vec_tree` ≈ `hybrid_rerank` > `chunk_embed`.
-  `pageindex` − `hybrid_rerank` ≈ +40 points, CI excluding 0. Dev (144): long_context 1.00 (142 applicable),
-  pageindex 0.83, raptor 0.51, vec_tree 0.43, hybrid_rerank 0.40, chunk_embed 0.32.
-- **Regime B:** `long_context` ≈ `pageindex` ≈ `hybrid_rerank` > `vec_tree` > `raptor` > `chunk_embed`.
-  `pageindex` − `hybrid_rerank` ≈ 0: no detectable difference. Dev (38): long_context 0.90 (30 applicable),
-  pageindex 0.89, hybrid_rerank 0.89, vec_tree 0.82, raptor 0.63, chunk_embed 0.58.
-- **Claim check (FinanceBench):** `long_context` ≥ `pageindex` > `raptor` ≈ `vec_tree` > `hybrid_rerank` >
-  `chunk_embed`. `pageindex` − `hybrid_rerank` ≈ +15 to +25 points. Unlike the §1 prediction, the tuned hybrid
-  does not close most of the gap. Dev (32): long_context 0.77 (30 applicable), pageindex 0.72, raptor 0.66,
-  vec_tree 0.66, hybrid_rerank 0.50, chunk_embed 0.47.
+- **Regime A:** `long_context` > `pageindex` > `raptor` > `hybrid_rerank` ≈ `vec_tree` > `chunk_embed`.
+  `pageindex` − `hybrid_rerank` ≈ +25 points, CI excluding 0. Tuned dev (144): long_context 1.00 (142
+  applicable), pageindex 0.83, raptor 0.69, hybrid_rerank 0.59, vec_tree 0.56, chunk_embed 0.47.
+- **Regime B:** all six within a few points: `hybrid_rerank` ≥ `long_context` ≈ `pageindex` ≈ `vec_tree` ≥
+  `raptor` ≈ `chunk_embed`. `pageindex` − `hybrid_rerank` ≈ 0 to −5 points: no detectable difference. Tuned dev
+  (38): hybrid_rerank 0.95, long_context 0.90 (30 applicable), pageindex 0.89, vec_tree 0.89, raptor 0.87,
+  chunk_embed 0.87.
+- **Claim check (FinanceBench):** `raptor` ≈ `long_context` ≥ `pageindex` ≈ `hybrid_rerank` ≈ `vec_tree` >
+  `chunk_embed`. `pageindex` − `hybrid_rerank` ≈ 0 to +5 points: no detectable difference, i.e. the tuned
+  hybrid closes most of the gap, as §1 predicts. Tuned dev (32): raptor 0.78, long_context 0.77 (30 applicable),
+  pageindex 0.72, hybrid_rerank 0.69, vec_tree 0.69, chunk_embed 0.63.
 
-Dev tuning may move these; if a tuned arm's dev accuracy changes its place, the prediction is revised in the
-tuning commit, before freezing, and the revision is visible in `git log`.
+Revised after dev tuning (2026-10-10, `runs/dev-tuning.md`), before freezing: the first version (commit
+225cdae) was written from the untuned arms and predicted a +40-point regime-A gap and a +15 to +25-point
+FinanceBench gap; tuning moved `raptor` above `hybrid_rerank` and narrowed both gaps. Both versions are in
+`git log`; the article shows the final one.
