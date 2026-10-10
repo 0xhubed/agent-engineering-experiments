@@ -1,5 +1,6 @@
 import json
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import httpx
@@ -26,6 +27,7 @@ class _Upstream(BaseHTTPRequestHandler):
     def do_POST(self):
         req = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
         _Upstream.seen.append(req)
+        time.sleep(req.get("delay", 0))
         if req.get("stream"):
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream")
@@ -96,3 +98,17 @@ def test_proxy_fills_missing_fields_but_keeps_the_callers(upstream):
     assert first["chat_template_kwargs"] == {"reasoning_effort": "medium"}
     assert second["temperature"] == 0.7 and second["seed"] == 0
     assert second["chat_template_kwargs"] == {"enable_thinking": False}
+
+
+@pytest.mark.parametrize("stream", [False, True])
+def test_proxy_charges_a_call_whose_caller_hung_up(upstream, stream):
+    with MeteringProxy(upstream, model="m", local=True) as proxy:
+        ledger = Ledger()
+        with proxy.recording(ledger):
+            with pytest.raises(httpx.ReadTimeout):
+                httpx.post(f"{proxy.base_url}/chat/completions", timeout=0.2,
+                           json={"model": "m", "messages": [], "delay": 0.5, "stream": stream})
+            deadline = time.time() + 5
+            while ledger.sequential_calls == 0 and time.time() < deadline:
+                time.sleep(0.05)
+    assert ledger.sequential_calls == 1 and ledger.input_tokens == (7 if stream else 10)
