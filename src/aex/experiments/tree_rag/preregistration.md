@@ -1,7 +1,7 @@
 # Tree RAG, phase 1 — pre-registration
 
-**Status: DRAFT — not frozen.** Freezing = the commit that removes this line, made after dev tuning (§5.1) and
-before the first test-split run (`git log` is the evidence; the article footer shows its hash).
+**Status: frozen 2026-10-10**, after dev tuning (§5.1) and the determinism check (§5.2), before the first
+test-split run (`git log` is the evidence; the article footer shows this commit's hash).
 
 ## 1. Hypotheses (spec §2.1, verbatim)
 
