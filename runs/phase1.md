@@ -31,3 +31,12 @@ environment, not a failure of the method, so the pre-registered `index_failed` r
 `pycryptodome` was added and the tree rebuilt under the same settings. The PageIndex process was stopped
 before it had written any row or its index cost, so no row was scored under the failure and the index cost is
 recorded once, with this tree included. The article lists this as a deviation.
+
+## 2026-10-11 09:50 — fewer long_context shards
+
+With all 20 shards running the server was saturated (~2.2k prompt tok/s, 15 running, 5–12 waiting) and calls
+from the PageIndex SDK (`pageindex`, `vec_tree`) waited past the SDK's own 600 s request timeout: 20 `error` rows
+by 09:44, 11 of them `vec_tree` (of its 17 rows). The timeout is part of the released defaults and is not
+changed. Instead `long_context` (≈200k prompt tokens per test row, the longest prompts in the queue) runs on one
+shard instead of three until the other arms finish; its other two shards resume then. `error` rows are rerun
+at the end of the run, as pre-registered (§5.3).
