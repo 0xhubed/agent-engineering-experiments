@@ -64,3 +64,11 @@ redone. Its recorded index is reused, not rebuilt.
 running, 2/3 still paused; 368 rows left) was stopped and restarted as `--shard i/2`, and `vec_tree` (486 left)
 as `--shard i/5`. Finished rows are skipped; questions in flight were redone. Earlier shard logs moved to
 `runs/phase1/old/`.
+
+## 2026-10-12 13:35 — vec_tree on seven shards, pageindex on five
+
+`chunk_embed` finished (847 rows); `hybrid_rerank` and `raptor` have one or two shards left with a few rows
+each. `pageindex` shard 0/4 finished. The server had room (13 running, 0 waiting, KV cache 38%), so
+`vec_tree` (452 rows left) was restarted as `--shard i/7` and `pageindex` (208 left) as `--shard i/5`, to
+bring the remaining arms to similar finishing times. `long_context` stays on two shards, as its ~200k-token
+prompts caused the earlier timeouts. The restarted processes also retry their arm's `error` rows.
