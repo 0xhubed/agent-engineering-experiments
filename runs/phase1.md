@@ -51,3 +51,9 @@ Each process prints a per-arm accuracy summary of the whole checkpoint when it e
 had exited normally showed that summary for the partial test run (aggregates only, no question-level rows).
 Nothing was changed because of it: all settings were frozen at e8e1778 and the shard schedule follows the plan
 above. Further checks of finished shards read row counts from the checkpoint, not the log tail.
+
+## 2026-10-12 05:35 — oracle done; vec_tree on four shards
+
+`oracle` finished (847 rows). Its slot went to `vec_tree`, the slowest arm (274 of 847 rows): its three shards
+were stopped and restarted as four (`--shard i/4`). Finished rows are skipped; the questions in flight were
+redone. Its recorded index is reused, not rebuilt.
