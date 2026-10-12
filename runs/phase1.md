@@ -72,3 +72,11 @@ each. `pageindex` shard 0/4 finished. The server had room (13 running, 0 waiting
 `vec_tree` (452 rows left) was restarted as `--shard i/7` and `pageindex` (208 left) as `--shard i/5`, to
 bring the remaining arms to similar finishing times. `long_context` stays on two shards, as its ~200k-token
 prompts caused the earlier timeouts. The restarted processes also retry their arm's `error` rows.
+
+## 2026-10-12 20:20 — vec_tree back to five shards
+
+With only `long_context`, `pageindex` and `vec_tree` left, the server stayed saturated (5–12 requests waiting,
+~2.6k prompt tok/s, ~22 generated tok/s in total). Calls from the PageIndex SDK waited past its 600 s timeout:
+7 of the 34 `vec_tree` rows in the last 100 minutes were `error` rows. `vec_tree` was restarted as
+`--shard i/5` to shorten the queue. All 21 `error` rows so far are request timeouts; they are rerun as
+pre-registered (§5.3).
