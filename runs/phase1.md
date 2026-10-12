@@ -57,3 +57,10 @@ above. Further checks of finished shards read row counts from the checkpoint, no
 `oracle` finished (847 rows). Its slot went to `vec_tree`, the slowest arm (274 of 847 rows): its three shards
 were stopped and restarted as four (`--shard i/4`). Finished rows are skipped; the questions in flight were
 redone. Its recorded index is reused, not rebuilt.
+
+## 2026-10-12 11:12 — long_context on two shards, vec_tree on five
+
+`hybrid_rerank` shard 0/3 and `raptor` shard 2/3 finished, freeing two slots. `long_context` (shard 1/3
+running, 2/3 still paused; 368 rows left) was stopped and restarted as `--shard i/2`, and `vec_tree` (486 left)
+as `--shard i/5`. Finished rows are skipped; questions in flight were redone. Earlier shard logs moved to
+`runs/phase1/old/`.
