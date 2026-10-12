@@ -40,3 +40,14 @@ by 09:44, 11 of them `vec_tree` (of its 17 rows). The timeout is part of the rel
 changed. Instead `long_context` (≈200k prompt tokens per test row, the longest prompts in the queue) runs on one
 shard instead of three until the other arms finish; its other two shards resume then. `error` rows are rerun
 at the end of the run, as pre-registered (§5.3).
+
+## 2026-10-12 02:57 — long_context shard 1/3 resumed
+
+`long_context` shard 0/3 finished its 301 questions. Shard 1/3 was resumed in its place, so the number of
+`long_context` processes stays at one; shard 2/3 resumes when the cheaper arms finish. The process manifest
+now records 0e74a70, which differs from 174c74e only by this log.
+
+Each process prints a per-arm accuracy summary of the whole checkpoint when it exits. Checking that the shard
+had exited normally showed that summary for the partial test run (aggregates only, no question-level rows).
+Nothing was changed because of it: all settings were frozen at e8e1778 and the shard schedule follows the plan
+above. Further checks of finished shards read row counts from the checkpoint, not the log tail.
