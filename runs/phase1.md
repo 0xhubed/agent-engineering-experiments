@@ -86,3 +86,16 @@ pre-registered (§5.3).
 `long_context` finished (847 rows, one `error` row), and `pageindex` shards 1/5 and 2/5 finished. With three
 `pageindex` shards left, `vec_tree` (237 rows left, 18 `error` rows) was restarted as `--shard i/9`, keeping
 twelve processes in total as before.
+
+## 2026-10-13 08:30 — pageindex done; error-row reruns start; one long_context row cannot be rerun
+
+`pageindex` finished (847 rows, 13 `error` rows, all SDK timeouts). With the queue short (0–4 waiting), the
+`error` rows of finished arms are rerun alongside `vec_tree` (nine shards): `pageindex` on three shards,
+`hybrid_rerank` (1 row) and `long_context` (1 row) on one each.
+
+The `long_context` row is not a timeout. The vLLM server rejects the request: "maximum context length is 262144
+tokens … you requested 8192 output tokens and your prompt contains at least 253953 input tokens". The document is
+under the pre-registered 150k-word N/A threshold (§2) but tokenizes above the window, so the word count
+underestimated its tokens. A rerun fails the same way. §2's intent is "N/A when it does not fit — never truncated"
+and §5.3 says `error` rows are rerun until none remain; this row can satisfy neither as written. The row is left as
+an `error` row in the checkpoint until a ruling (recorded as a deviation in the article either way). Not truncated.
