@@ -106,3 +106,32 @@ an `error` row in the checkpoint until a ruling (recorded as a deviation in the 
 otherwise idle server and succeeded. The checkpoint holds 6,776 rows (7 arms × 847 test questions, plus
 `pageindex_native`). One `error` row remains: the `long_context` context overflow above, pending a ruling. Every
 timeout `error` row was resolved by a rerun.
+
+## 2026-10-13 13:29 — reproduction (Task 5): verdicts agree on 96.4% of 168 rows
+
+A clean clone at 22cb395 (same code as the run; `git_dirty` false in its manifest) ran the 21 test questions of
+`--shard 0/48` × all arms with `configs/tree_rag/reproduce.yaml` into a fresh checkpoint: 168 rows, no `error`
+rows. Index artefacts under `data/` were shared with the full run, so this reproduces answering, navigation and
+judging, not the index builds. `tree_rag.compare` against `runs/phase1.sqlite` (`runs/reproduce-compare.json`):
+
+| arm | n | raw | correct | evidence (ordered) |
+|---|---|---|---|---|
+| all | 168 | 4.8% | **96.4%** | 56.5% |
+| chunk_embed | 21 | 0.0% | 95.2% | 0.0% |
+| hybrid_rerank | 21 | 0.0% | 100.0% | 95.2% |
+| long_context | 21 | 9.5% | 100.0% | 100.0% |
+| oracle | 21 | 19.1% | 100.0% | 100.0% |
+| pageindex | 21 | 0.0% | 85.7% | 52.4% |
+| pageindex_native | 21 | 4.8% | 95.2% | 52.4% |
+| raptor | 21 | 0.0% | 95.2% | 0.0% |
+| vec_tree | 21 | 4.8% | 100.0% | 52.4% |
+
+Verdict agreement is 96.4% (6 of 168 rows flip; 3 in `pageindex`), above the ≥80% criterion fixed in the
+determinism addendum (which measured 91.9% on dev). **The run reproduces.**
+
+`compare`'s evidence column compares the ordered page list. For `chunk_embed` and `raptor` it reads 0% because
+the prospectuses share near-identical boilerplate: chunks from different documents tie on score and come back in a
+different order. Computed ad hoc (not a pre-registered criterion): the evidence page *set* agrees on 71.4% of rows
+overall (chunk_embed 76.2%, raptor 38.1%), and the scored pair (evidence recall, evidence precision) agrees on
+85.1% (chunk_embed 90.5%, raptor 81.0%, pageindex 66.7%, vec_tree 76.2%). Evidence scores are therefore noisier
+than verdicts, most of all for the navigating arms; the article reports that alongside the evidence metrics.
