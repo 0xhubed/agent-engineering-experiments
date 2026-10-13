@@ -99,3 +99,10 @@ under the pre-registered 150k-word N/A threshold (§2) but tokenizes above the w
 underestimated its tokens. A rerun fails the same way. §2's intent is "N/A when it does not fit — never truncated"
 and §5.3 says `error` rows are rerun until none remain; this row can satisfy neither as written. The row is left as
 an `error` row in the checkpoint until a ruling (recorded as a deviation in the article either way). Not truncated.
+
+## 2026-10-13 11:31 — run complete
+
+`vec_tree` finished at 11:10; the last `error` rows (3 `pageindex`, 1 `vec_tree`, all timeouts) were rerun on an
+otherwise idle server and succeeded. The checkpoint holds 6,776 rows (7 arms × 847 test questions, plus
+`pageindex_native`). One `error` row remains: the `long_context` context overflow above, pending a ruling. Every
+timeout `error` row was resolved by a rerun.
