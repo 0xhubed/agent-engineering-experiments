@@ -80,3 +80,9 @@ With only `long_context`, `pageindex` and `vec_tree` left, the server stayed sat
 7 of the 34 `vec_tree` rows in the last 100 minutes were `error` rows. `vec_tree` was restarted as
 `--shard i/5` to shorten the queue. All 21 `error` rows so far are request timeouts; they are rerun as
 pre-registered (§5.3).
+
+## 2026-10-13 06:53 — long_context done; vec_tree on nine shards
+
+`long_context` finished (847 rows, one `error` row), and `pageindex` shards 1/5 and 2/5 finished. With three
+`pageindex` shards left, `vec_tree` (237 rows left, 18 `error` rows) was restarted as `--shard i/9`, keeping
+twelve processes in total as before.
