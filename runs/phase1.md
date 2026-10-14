@@ -145,3 +145,19 @@ as a deviation from §2's word-count threshold. The row (`financebench-02049`, `
 N/A rows); its original error text stays in `detail.error` and the ruling is recorded in `detail.ruling`. The
 checkpoint before the change is kept locally as `runs/phase1.pre-ruling.sqlite`. The checkpoint now has no `error`
 rows; `long_context` has 61 `not_applicable` rows (60 by the word-count threshold, 1 by this ruling).
+
+## 2026-10-14 — export and observations after the run
+
+Exported with `--data-version 2026-10-14.1` (no `error` rows). Two export changes, neither touching any row:
+the runs schema now accepts the pre-registered `max_turns` failure class (10 rows), and explorer shards carry
+quotes for the top 5 evidence items per result with one tree file per document (135 MB → 42 MB).
+
+Read while choosing the article's showcase questions (the run was complete; no score was changed):
+- **Answer-key error.** `unanswerable-jb-rd2-2026-1-0` is gold-unanswerable, but a footnote on p.184 of
+  `jb-rd2-2026` gives Julius Baer Group Ltd.'s registered shares as 206'001'780 (from 29 June 2023). `chunk_embed`
+  and `hybrid_rerank` answered that and are scored wrong; the arms that said NOT_STATED are scored right.
+- **Judge under-counts `pageindex_native` refusals.** Of its 15 `answered_unanswerable` rows, by Claude's reading
+  12 say in prose that the product has no such feature ("does not have an autocall trigger level"), which should
+  count as a correct refusal; the judge scored them as answers. Up to 12/847 = 1.4 points overall. The shared
+  answerer's rows use the `NOT_STATED` token and are unaffected.
+Both are reported in the article's limitations.
