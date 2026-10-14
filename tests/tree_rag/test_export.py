@@ -74,6 +74,14 @@ def test_not_applicable_rows_are_kept_with_null_correct(tmp_path):
     assert len(na) == 3 and all(r["correct"] is None and r["failure"] == "not_applicable" for r in na)
 
 
+def test_max_turns_failures_export(tmp_path):
+    # PageIndex rows that run out of turns 3 times are scored wrong with failure class `max_turns` (prereg §2).
+    rows, qs = _rows(tmp_path)
+    rows[0] = rows[0] | {"failure": "max_turns", "correct": False}
+    data = json.loads(_export(tmp_path, rows, qs).read_text())
+    assert data["rows"][0]["failure"] == "max_turns"
+
+
 def test_error_rows_block_export_unless_allowed(tmp_path):
     rows, qs = _rows(tmp_path)
     rows[0] = rows[0] | {"failure": "error", "correct": None}
