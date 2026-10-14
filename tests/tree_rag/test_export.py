@@ -102,6 +102,27 @@ def test_explorer_snippets_are_short_and_never_full_pages(tmp_path):
     assert q1["docs"][0]["n_pages"] == 3 and q1["gold_pages"] == [["fx-doc-1", 2]]
 
 
+def test_only_the_top_evidence_items_carry_snippets(tmp_path):
+    rows, qs = _rows(tmp_path)
+    rows = [r | {"detail": r["detail"] | {"evidence": [["fx-doc-1", p] for p in (1, 2, 3)]}} for r in rows]
+    _export(tmp_path, rows, qs, snippet_top=2)
+    shard = json.loads((tmp_path / "out" / "explorer" / "fixture-0.json").read_text())
+    assert shard["schema"] == "tree-rag-explorer/v2"
+    evidence = shard["questions"][0]["results"][0]["evidence"]
+    assert ["snippet" in e for e in evidence] == [True, True, False]
+    assert [e["page"] for e in evidence] == [1, 2, 3]
+
+
+def test_trees_are_written_once_per_document_not_per_question(tmp_path):
+    rows, qs = _rows(tmp_path)
+    _export(tmp_path, rows, qs)
+    shard = json.loads((tmp_path / "out" / "explorer" / "fixture-0.json").read_text())
+    assert all("tree" not in d for q in shard["questions"] for d in q["docs"])
+    tree = json.loads((tmp_path / "out" / "explorer" / "trees" / "fx-doc-1.json").read_text())
+    assert tree["schema"] == "tree-rag-tree/v1" and tree["doc_id"] == "fx-doc-1"
+    assert tree["tree"] and {"id", "title", "start_page", "end_page"} <= set(tree["tree"][0])
+
+
 def test_sharding(tmp_path):
     rows, qs = _rows(tmp_path)
     _export(tmp_path, rows, qs, shard_size=2)
@@ -117,7 +138,7 @@ def test_redacted_datasets_withhold_text_but_keep_rows(tmp_path):
     shard = json.loads((tmp_path / "out" / "explorer" / "fixture-0.json").read_text())
     for q in shard["questions"]:
         assert q["redacted"] and q["question"] == f"fixture question {q['qid']}" and q["gold"]["value"] is None
-        assert all(r["answer"] is None and all(e["snippet"] == "" for e in r["evidence"]) for r in q["results"])
+        assert all(r["answer"] is None and all(e.get("snippet", "") == "" for e in r["evidence"]) for r in q["results"])
     text = json.dumps(shard)
     assert all(qq.question not in text for qq in qs)
 
