@@ -9,6 +9,7 @@ dependencies = [
   "jsonschema>=4.23",
   "docling>=2.40",
   "pageindex==0.2.21",
+  "pycryptodome>=3.24.0",
 ]
 
 [dependency-groups]

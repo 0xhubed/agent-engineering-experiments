@@ -38,3 +38,12 @@ def test_unknown_arm_lists_known_names():
 def test_store_get_unknown_doc_names_it():
     with pytest.raises(KeyError, match="missing-doc"):
         Store([_doc()]).get("missing-doc")
+
+
+def test_reachable_keeps_whole_corpora_and_only_the_asked_filings():
+    docs = [ParsedDoc(d, d, f"sha256:{d}", (Page(1, "x"),), ()) for d in ("t1", "t2", "f1", "f2")]
+    store = Store(docs, groups={"t1": "ts", "t2": "ts", "f1": "fb", "f2": "fb"})
+    qs = [Question("a", "termsheets", "A", "lookup", "?", ("t1",), GoldAnswer("numeric", "1"), (("t1", 1),), "dev"),
+          Question("b", "financebench", "C", "lookup", "?", ("f2",), GoldAnswer("numeric", "1"), (("f2", 1),), "dev")]
+    kept = store.reachable(qs, {"financebench": "question_docs"})
+    assert sorted(kept.docs) == ["f2", "t1", "t2"] and kept.groups == store.groups

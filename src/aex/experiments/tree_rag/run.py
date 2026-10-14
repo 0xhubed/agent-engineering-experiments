@@ -1,12 +1,14 @@
 """Run arms × navigators × answerers over the gold questions, one checkpointed row each."""
 from __future__ import annotations
 
+import argparse
 import copy
+import hashlib
 import json
 import os
 import sys
 from collections import defaultdict
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 
 import yaml
@@ -25,7 +27,7 @@ from aex.experiments.tree_rag.types import ParsedDoc, Question, Retrieval
 @dataclass(frozen=True)
 class RunConfig:
     seed: int
-    gold: str
+    gold: str | list[str]
     parsed_dir: str
     checkpoint: str
     arms: list[str]
@@ -40,6 +42,10 @@ class RunConfig:
     services: dict[str, dict] = field(default_factory=dict)      # embedder / reranker specs shared by arms
     arm_options: dict[str, dict] = field(default_factory=dict)   # per-arm keyword options
     scope: dict[str, str] = field(default_factory=dict)          # dataset -> "corpus" | "question_docs"
+    # Model for index-time LLM calls (RAPTOR summaries, PageIndex tree building); default: the navigator.
+    # Same weights as the navigator, typically with thinking off: summarising needs no reasoning, and with
+    # thinking on a single summary can run past 10 minutes.
+    indexer: str | None = None
     prices: dict[str, list[float]] = field(default_factory=dict)
 
     @classmethod
@@ -137,6 +143,16 @@ def _evaluate_one(cfg: RunConfig, q: Question, arm, navigator: str, answerer_id:
                       "tokens_query": None, "tokens_index_amortised": amortised_tokens,
                       "cost_usd": None, "gpu_s": None, "failure": "not_applicable", "detail": detail}
 
+    if retrieval.failure:
+        # The method could not run for this question (e.g. its index failed to build): wrong, not excluded.
+        failed = row | {"correct": False, "judge": None, "evidence_recall": recall, "evidence_precision": precision,
+                        "wrong_doc": wrong_doc, "latency_s": None, "llm_calls_sequential": None, "tokens_query": None,
+                        "tokens_index_amortised": amortised_tokens, "cost_usd": None, "gpu_s": None,
+                        "failure": retrieval.failure, "detail": detail}
+        if "native_answer" in retrieval.trace:
+            return failed, failed | {"arm": f"{arm.name}_native", "answerer": navigator}
+        return failed
+
     parse_failure = any(not store.get(d).page(p).text.strip() for d, p in q.evidence)
     n = max(n_questions, 1)
     prices = {model: tuple(pair) for model, pair in cfg.prices.items()}
@@ -183,9 +199,16 @@ def _gold_text(q: Question) -> str:
     return "; ".join(q.gold.value) if isinstance(q.gold.value, list) else str(q.gold.value)
 
 
+def in_shard(qid: str, shard: tuple[int, int]) -> bool:
+    i, k = shard
+    return int(hashlib.sha256(qid.encode()).hexdigest(), 16) % k == i
+
+
 def run_experiment(cfg: RunConfig, *, clients: dict[str, ChatClient], store: Store,
-                   questions: list[Question], checkpoint: Checkpoint, services: dict | None = None) -> None:
+                   questions: list[Question], checkpoint: Checkpoint, services: dict | None = None,
+                   shard: tuple[int, int] = (0, 1)) -> None:
     selected = [q for q in questions if q.split in cfg.splits]
+    store = store.reachable(selected, cfg.scope)
 
     def pending(key: str) -> bool:
         existing = checkpoint.get(key)
@@ -193,11 +216,13 @@ def run_experiment(cfg: RunConfig, *, clients: dict[str, ChatClient], store: Sto
 
     for arm_name in cfg.arms:
         options = {**(services or {}), "scopes": cfg.scope, **cfg.arm_options.get(arm_name, {})}
+        if cfg.indexer:
+            options["indexer"] = clients[cfg.indexer]
         probe = make_arm(arm_name, **options)
         navigators = cfg.navigators if probe.uses_navigator else ["none"]
         for navigator in navigators:
             todo = [(q, a) for q in selected for a in cfg.answerers
-                    if pending(row_key(q.qid, arm_name, navigator, a))]
+                    if in_shard(q.qid, shard) and pending(row_key(q.qid, arm_name, navigator, a))]
             if not todo:
                 continue
             arm = make_arm(arm_name, navigator=clients.get(navigator), **options) if probe.uses_navigator else probe
@@ -250,19 +275,33 @@ def load_store(parsed_dir: str | Path) -> Store:
 
 
 def main(argv: list[str]) -> int:
-    cfg = RunConfig.from_yaml(argv[1])
+    ap = argparse.ArgumentParser(prog="run")
+    ap.add_argument("config")
+    ap.add_argument("--arms", help="comma-separated subset of the config's arms; processes running different "
+                                   "subsets can share one checkpoint")
+    ap.add_argument("--shard", default="0/1", help="i/k: only questions whose qid hashes to i mod k, so k processes "
+                                                   "can split one arm; build its indexes first (shards would race)")
+    args = ap.parse_args(argv[1:])
+    cfg = RunConfig.from_yaml(args.config)
+    only = args.arms.split(",") if args.arms else cfg.arms
+    if unknown := set(only) - set(cfg.arms):
+        raise SystemExit(f"arms not in the config: {', '.join(sorted(unknown))}")
     questions = load_questions(cfg.gold, seed=cfg.seed, dev_fraction=cfg.dev_fraction)
     store = load_store(cfg.parsed_dir)
     services = {name: build_service(name, spec) for name, spec in cfg.services.items()}
-    used = set(cfg.answerers) | {cfg.judge} | {n for n in cfg.navigators if n != "none"}
+    used = set(cfg.answerers) | {cfg.judge} | {n for n in cfg.navigators if n != "none"} | (
+        {cfg.indexer} if cfg.indexer else set())
     clients = {mid: build_client(mid, cfg.models[mid]) for mid in used}
     manifest = build_manifest(asdict(cfg), models={mid: cfg.models[mid].get("revision", "unknown") for mid in used})
     Path(cfg.checkpoint).parent.mkdir(parents=True, exist_ok=True)
     Path(f"{cfg.checkpoint}.manifest.json").write_text(
         json.dumps(manifest | {"manifest_hash": manifest_hash(manifest)}, indent=2))
     checkpoint = Checkpoint(cfg.checkpoint)
-    run_experiment(cfg, clients=clients, store=store, questions=questions, checkpoint=checkpoint,
-                   services=services)
+    i, k = map(int, args.shard.split("/"))
+    if not 0 <= i < k:
+        raise SystemExit(f"bad --shard {args.shard!r}: need i/k with 0 <= i < k")
+    run_experiment(replace(cfg, arms=[a for a in cfg.arms if a in only]), clients=clients, store=store, questions=questions, checkpoint=checkpoint,
+                   services=services, shard=(i, k))
     print(_summary(checkpoint.rows()))
     return 0
 

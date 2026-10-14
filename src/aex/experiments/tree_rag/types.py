@@ -85,6 +85,7 @@ class Retrieval:
     trace: dict
     ledger: Ledger
     not_applicable: bool = False
+    failure: str | None = None              # the method could not run for this question: scored incorrect, no answer
     max_evidence_words: int | None = None   # overrides the shared budget (only long_context uses this)
 
 

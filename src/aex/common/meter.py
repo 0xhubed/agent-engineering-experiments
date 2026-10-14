@@ -113,37 +113,67 @@ class MeteringProxy:
         started = time.perf_counter()
         request = self._http.build_request(handler.command, url, headers=headers, content=body)
         response = self._http.send(request, stream=True)
+        # A caller may hang up before the reply arrives (its own timeout; it then retries). The server did the
+        # work, so the call is still charged: write failures are swallowed and usage is read to the end.
+        client = _Client(handler)
         try:
-            handler.send_response(response.status_code)
+            client.send_response(response.status_code)
             for k, v in response.headers.items():
                 if k.lower() not in _HOP_HEADERS:
-                    handler.send_header(k, v)
+                    client.send_header(k, v)
             if stream:
-                handler.send_header("Transfer-Encoding", "chunked")
-                handler.end_headers()
+                client.send_header("Transfer-Encoding", "chunked")
+                client.end_headers()
                 usage, finish, buffer = None, None, b""
                 for chunk in response.iter_raw():
-                    handler.wfile.write(f"{len(chunk):X}\r\n".encode() + chunk + b"\r\n")
-                    handler.wfile.flush()
+                    client.write(f"{len(chunk):X}\r\n".encode() + chunk + b"\r\n")
                     buffer += chunk
                     *lines, buffer = buffer.split(b"\n")
                     for line in lines:
                         usage, finish = _scan_sse(line, usage, finish)
                 usage, finish = _scan_sse(buffer, usage, finish)
-                handler.wfile.write(b"0\r\n\r\n")
+                client.write(b"0\r\n\r\n")
                 if is_chat and response.status_code < 400:
                     self._record(usage, time.perf_counter() - started, finish)
             else:
                 data = response.read()
-                handler.send_header("Content-Length", str(len(data)))
-                handler.end_headers()
-                handler.wfile.write(data)
                 if is_chat and response.status_code < 400:
                     parsed = json.loads(data)
                     finish = (parsed.get("choices") or [{}])[0].get("finish_reason")
                     self._record(parsed.get("usage"), time.perf_counter() - started, finish)
+                client.send_header("Content-Length", str(len(data)))
+                client.end_headers()
+                client.write(data)
         finally:
             response.close()
+
+
+class _Client:
+    """The caller's side of the connection; once it has hung up, further writes are dropped."""
+
+    def __init__(self, handler: BaseHTTPRequestHandler) -> None:
+        self.handler, self.gone = handler, False
+
+    def _try(self, fn, *args) -> None:
+        if self.gone:
+            return
+        try:
+            fn(*args)
+        except (BrokenPipeError, ConnectionResetError):
+            self.gone = True
+            self.handler.close_connection = True
+
+    def send_response(self, code: int) -> None:
+        self._try(self.handler.send_response, code)
+
+    def send_header(self, key: str, value: str) -> None:
+        self._try(self.handler.send_header, key, value)
+
+    def end_headers(self) -> None:
+        self._try(self.handler.end_headers)
+
+    def write(self, data: bytes) -> None:
+        self._try(lambda: (self.handler.wfile.write(data), self.handler.wfile.flush()))
 
 
 def _scan_sse(line: bytes, usage: dict | None, finish: str | None) -> tuple[dict | None, str | None]:

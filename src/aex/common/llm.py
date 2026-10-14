@@ -45,6 +45,7 @@ class OpenAICompatClient:
         # Server-specific request fields, e.g. {"chat_template_kwargs": {"reasoning_effort": "medium"}}.
         self.extra_body = dict(extra_body or {})
         self.local = local
+        self.timeout_s = timeout_s
         self._retries = retries
         self._backoff_s = backoff_s
         self._http = httpx.Client(
