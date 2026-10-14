@@ -135,3 +135,13 @@ different order. Computed ad hoc (not a pre-registered criterion): the evidence 
 overall (chunk_embed 76.2%, raptor 38.1%), and the scored pair (evidence recall, evidence precision) agrees on
 85.1% (chunk_embed 90.5%, raptor 81.0%, pageindex 66.7%, vec_tree 76.2%). Evidence scores are therefore noisier
 than verdicts, most of all for the navigating arms; the article reports that alongside the evidence metrics.
+
+## 2026-10-14 — ruling on the long_context context overflow: not_applicable
+
+Daniel ruled option A for the `long_context` row that overflowed the context window (08:30 entry): it counts as
+`not_applicable`, matching §2's intent ("N/A when the document does not fit — never truncated"), and is reported
+as a deviation from §2's word-count threshold. The row (`financebench-02049`, `long_context`) was changed in
+`runs/phase1.sqlite` from `failure: error` to `failure: not_applicable` (`tokens_index_amortised: 0`, as the other
+N/A rows); its original error text stays in `detail.error` and the ruling is recorded in `detail.ruling`. The
+checkpoint before the change is kept locally as `runs/phase1.pre-ruling.sqlite`. The checkpoint now has no `error`
+rows; `long_context` has 61 `not_applicable` rows (60 by the word-count threshold, 1 by this ruling).
