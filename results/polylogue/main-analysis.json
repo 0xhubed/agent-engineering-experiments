@@ -1,0 +1,497 @@
+{
+  "matrix": "main",
+  "runs": 600,
+  "expected": 600,
+  "solve": {
+    "bcp": {
+      "single": {
+        "runs": 60,
+        "first": 16,
+        "solved": 16
+      },
+      "isolated": {
+        "runs": 60,
+        "first": 30,
+        "solved": 30
+      },
+      "stigmergic": {
+        "runs": 60,
+        "first": 32,
+        "solved": 32
+      },
+      "polylogue": {
+        "runs": 60,
+        "first": 28,
+        "solved": 28
+      },
+      "polylogue-bare": {
+        "runs": 60,
+        "first": 27,
+        "solved": 27
+      }
+    },
+    "math": {
+      "single": {
+        "runs": 60,
+        "first": 21,
+        "solved": 21
+      },
+      "isolated": {
+        "runs": 60,
+        "first": 27,
+        "solved": 30
+      },
+      "stigmergic": {
+        "runs": 60,
+        "first": 25,
+        "solved": 25
+      },
+      "polylogue": {
+        "runs": 60,
+        "first": 23,
+        "solved": 23
+      },
+      "polylogue-bare": {
+        "runs": 60,
+        "first": 23,
+        "solved": 23
+      }
+    }
+  },
+  "describe": {
+    "bcp": {
+      "isolated": {
+        "runs": 60,
+        "messages_per_agent": 0.0,
+        "runs_with_substantive_message": 0,
+        "agents_with_substantive_message": 0,
+        "agents": 240,
+        "median_ms_to_first_substantive": null,
+        "median_idle_ms_per_agent": 218953,
+        "duplicate_reads": [
+          105,
+          249
+        ],
+        "duplicate_python": [
+          0,
+          0
+        ],
+        "wrong_consensus": 0,
+        "claims_per_run": 0.5,
+        "false_claims": [
+          0,
+          30
+        ],
+        "end_reasons": {
+          "solved": 30,
+          "budget": 29,
+          "all_idle": 1
+        },
+        "median_tokens": 285998.5,
+        "median_wall_s": 319.652
+      },
+      "polylogue": {
+        "runs": 60,
+        "messages_per_agent": 0.9208333333333333,
+        "runs_with_substantive_message": 12,
+        "agents_with_substantive_message": 20,
+        "agents": 240,
+        "median_ms_to_first_substantive": 8530.5,
+        "median_idle_ms_per_agent": 535130,
+        "duplicate_reads": [
+          77,
+          241
+        ],
+        "duplicate_python": [
+          0,
+          0
+        ],
+        "wrong_consensus": 0,
+        "claims_per_run": 0.5,
+        "false_claims": [
+          2,
+          30
+        ],
+        "end_reasons": {
+          "solved": 28,
+          "budget": 27,
+          "wrong_claim": 2,
+          "killed": 3
+        },
+        "median_tokens": 234992.0,
+        "median_wall_s": 288.911
+      },
+      "polylogue-bare": {
+        "runs": 60,
+        "messages_per_agent": 0.0125,
+        "runs_with_substantive_message": 1,
+        "agents_with_substantive_message": 2,
+        "agents": 240,
+        "median_ms_to_first_substantive": 66463,
+        "median_idle_ms_per_agent": 364784,
+        "duplicate_reads": [
+          92,
+          258
+        ],
+        "duplicate_python": [
+          0,
+          0
+        ],
+        "wrong_consensus": 0,
+        "claims_per_run": 0.45,
+        "false_claims": [
+          0,
+          27
+        ],
+        "end_reasons": {
+          "solved": 27,
+          "budget": 33
+        },
+        "median_tokens": 298645.0,
+        "median_wall_s": 353.089
+      },
+      "single": {
+        "runs": 60,
+        "messages_per_agent": 0.0,
+        "runs_with_substantive_message": 0,
+        "agents_with_substantive_message": 0,
+        "agents": 60,
+        "median_ms_to_first_substantive": null,
+        "median_idle_ms_per_agent": 0,
+        "duplicate_reads": [
+          0,
+          131
+        ],
+        "duplicate_python": [
+          0,
+          0
+        ],
+        "wrong_consensus": 0,
+        "claims_per_run": 0.26666666666666666,
+        "false_claims": [
+          0,
+          16
+        ],
+        "end_reasons": {
+          "solved": 16,
+          "budget": 41,
+          "all_idle": 3
+        },
+        "median_tokens": 65860.5,
+        "median_wall_s": 216.6325
+      },
+      "stigmergic": {
+        "runs": 60,
+        "messages_per_agent": 0.0,
+        "runs_with_substantive_message": 0,
+        "agents_with_substantive_message": 0,
+        "agents": 240,
+        "median_ms_to_first_substantive": null,
+        "median_idle_ms_per_agent": 297797.5,
+        "duplicate_reads": [
+          110,
+          308
+        ],
+        "duplicate_python": [
+          0,
+          0
+        ],
+        "wrong_consensus": 0,
+        "claims_per_run": 0.5666666666666667,
+        "false_claims": [
+          2,
+          34
+        ],
+        "end_reasons": {
+          "solved": 32,
+          "budget": 26,
+          "wrong_claim": 2
+        },
+        "median_tokens": 241712.5,
+        "median_wall_s": 284.8895
+      }
+    },
+    "math": {
+      "isolated": {
+        "runs": 60,
+        "messages_per_agent": 0.0,
+        "runs_with_substantive_message": 0,
+        "agents_with_substantive_message": 0,
+        "agents": 240,
+        "median_ms_to_first_substantive": null,
+        "median_idle_ms_per_agent": 47275,
+        "duplicate_reads": [
+          0,
+          0
+        ],
+        "duplicate_python": [
+          0,
+          428
+        ],
+        "wrong_consensus": 0,
+        "claims_per_run": 0.55,
+        "false_claims": [
+          3,
+          33
+        ],
+        "end_reasons": {
+          "budget": 22,
+          "all_idle": 4,
+          "solved": 30,
+          "killed": 4
+        },
+        "median_tokens": 120736.0,
+        "median_wall_s": 1144.872
+      },
+      "polylogue": {
+        "runs": 60,
+        "messages_per_agent": 0.525,
+        "runs_with_substantive_message": 23,
+        "agents_with_substantive_message": 42,
+        "agents": 240,
+        "median_ms_to_first_substantive": 192575,
+        "median_idle_ms_per_agent": 84267,
+        "duplicate_reads": [
+          0,
+          0
+        ],
+        "duplicate_python": [
+          0,
+          436
+        ],
+        "wrong_consensus": 0,
+        "claims_per_run": 0.38333333333333336,
+        "false_claims": [
+          0,
+          23
+        ],
+        "end_reasons": {
+          "all_idle": 3,
+          "budget": 31,
+          "solved": 23,
+          "killed": 3
+        },
+        "median_tokens": 132276.5,
+        "median_wall_s": 1530.091
+      },
+      "polylogue-bare": {
+        "runs": 60,
+        "messages_per_agent": 0.004166666666666667,
+        "runs_with_substantive_message": 0,
+        "agents_with_substantive_message": 0,
+        "agents": 240,
+        "median_ms_to_first_substantive": null,
+        "median_idle_ms_per_agent": 81651,
+        "duplicate_reads": [
+          0,
+          0
+        ],
+        "duplicate_python": [
+          0,
+          441
+        ],
+        "wrong_consensus": 0,
+        "claims_per_run": 0.38333333333333336,
+        "false_claims": [
+          0,
+          23
+        ],
+        "end_reasons": {
+          "budget": 26,
+          "solved": 23,
+          "killed": 7,
+          "all_idle": 4
+        },
+        "median_tokens": 125648.0,
+        "median_wall_s": 1549.1415
+      },
+      "single": {
+        "runs": 60,
+        "messages_per_agent": 0.0,
+        "runs_with_substantive_message": 0,
+        "agents_with_substantive_message": 0,
+        "agents": 60,
+        "median_ms_to_first_substantive": null,
+        "median_idle_ms_per_agent": 0,
+        "duplicate_reads": [
+          0,
+          0
+        ],
+        "duplicate_python": [
+          0,
+          128
+        ],
+        "wrong_consensus": 0,
+        "claims_per_run": 0.38333333333333336,
+        "false_claims": [
+          2,
+          23
+        ],
+        "end_reasons": {
+          "all_idle": 17,
+          "budget": 20,
+          "solved": 21,
+          "wrong_claim": 2
+        },
+        "median_tokens": 29476.0,
+        "median_wall_s": 678.24
+      },
+      "stigmergic": {
+        "runs": 60,
+        "messages_per_agent": 0.0,
+        "runs_with_substantive_message": 0,
+        "agents_with_substantive_message": 0,
+        "agents": 240,
+        "median_ms_to_first_substantive": null,
+        "median_idle_ms_per_agent": 99758.5,
+        "duplicate_reads": [
+          0,
+          0
+        ],
+        "duplicate_python": [
+          0,
+          442
+        ],
+        "wrong_consensus": 0,
+        "claims_per_run": 0.4666666666666667,
+        "false_claims": [
+          3,
+          28
+        ],
+        "end_reasons": {
+          "budget": 24,
+          "all_idle": 2,
+          "solved": 25,
+          "wrong_claim": 3,
+          "killed": 6
+        },
+        "median_tokens": 119191.0,
+        "median_wall_s": 1392.423
+      }
+    }
+  },
+  "verdict": {
+    "H2": "ONLY PARALLELISM",
+    "h2": {
+      "effect": -3.3333333333333335,
+      "lo": -15.0,
+      "hi": 6.666666666666667,
+      "n": 60,
+      "mcnemar_p": 0.79052734375,
+      "discordant": [
+        6,
+        8
+      ]
+    },
+    "only_parallelism_check": {
+      "effect": 23.333333333333332,
+      "lo": 11.666666666666666,
+      "hi": 36.666666666666664,
+      "n": 60,
+      "mcnemar_p": 0.0001220703125,
+      "discordant": [
+        14,
+        0
+      ]
+    },
+    "holm": {
+      "H2": 1.0,
+      "H1": 1.0,
+      "H3": 1.0
+    },
+    "H1": {
+      "testable": true,
+      "pairs": 22,
+      "ratio": 1.0712832603570226,
+      "lo": 0.7800109462417903,
+      "hi": 1.49447983014862,
+      "p": 0.7485799789428711,
+      "holds": false
+    },
+    "H3": {
+      "testable": true,
+      "effect": 3.3333333333333335,
+      "lo_one_sided": -10.0,
+      "p": 0.3688,
+      "holds": false
+    },
+    "H4": {
+      "share_agents_substantive": 0.004166666666666667,
+      "diff_vs_isolated": {
+        "effect": -5.833333333333333,
+        "lo": -13.333333333333334,
+        "hi": 1.6666666666666667,
+        "n": 120,
+        "mcnemar_p": 0.143463134765625,
+        "discordant": [
+          5,
+          12
+        ]
+      },
+      "holds": false
+    },
+    "H5": {
+      "bcp": {
+        "ratio": 1.0524623601053134,
+        "lo": 0.772796971685803,
+        "hi": 1.483769940039627,
+        "meets_1_5": false
+      },
+      "math": {
+        "ratio": 1.5084243919548497,
+        "lo": 1.0805440933447703,
+        "hi": 2.2193987239021467,
+        "meets_1_5": true
+      }
+    },
+    "secondary": {
+      "stigmergic - polylogue": {
+        "effect": 5.0,
+        "lo": -2.5,
+        "hi": 12.5,
+        "n": 120,
+        "mcnemar_p": 0.26317596435546875,
+        "discordant": [
+          13,
+          7
+        ]
+      },
+      "polylogue - polylogue-bare": {
+        "effect": 0.8333333333333334,
+        "lo": -5.0,
+        "hi": 6.666666666666667,
+        "n": 120,
+        "mcnemar_p": 1.0,
+        "discordant": [
+          8,
+          7
+        ]
+      },
+      "isolated - single": {
+        "effect": 16.666666666666668,
+        "lo": 8.333333333333334,
+        "hi": 25.833333333333332,
+        "n": 120,
+        "mcnemar_p": 8.797645568847656e-05,
+        "discordant": [
+          23,
+          3
+        ]
+      },
+      "isolated best-of-N - first claim": {
+        "effect": 2.5
+      }
+    },
+    "manipulation_check": {
+      "runs_with_substantive_message": 12,
+      "runs": 60,
+      "messages_per_agent": {
+        "isolated": 0.0,
+        "polylogue": 0.9208333333333333,
+        "polylogue-bare": 0.0125,
+        "single": 0.0,
+        "stigmergic": 0.0
+      }
+    }
+  }
+}
