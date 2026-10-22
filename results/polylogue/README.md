@@ -3,7 +3,7 @@
 The main run of the experiment pre-registered in [`preregistrations/07-multi-agent-communication.md`](../../preregistrations/07-multi-agent-communication.md): 2 suites × 30 scored tasks × 5 conditions × 2 seeds = 600 runs on Qwen3.8-27B (`unsloth/Qwen3.8-27B-NVFP4`, revision `7d6f8d4`), from 2026-10-17 to 2026-10-22, on one DGX Spark. Three runs ended in an infrastructure error and were rerun once, as pre-registered; none failed twice.
 
 - `main-runs.csv`: one row per scored cell (600 rows). Infra-error cells show their rerun.
-- `main-analysis.json`: the output of the frozen analysis (`polyprep.analysis` in the harness repository, analysis plan of 2026-10-18), including verdicts, intervals and event-log metrics.
+- `main-analysis.json`: the output of the frozen analysis (`polyprep.analysis` in the harness, [0xhubed/polylogue](https://github.com/0xhubed/polylogue), analysis plan of 2026-10-18), including verdicts, intervals and event-log metrics.
 
 Neither file contains question text, answers or transcripts. BrowseComp-Plus keeps its questions obfuscated to keep them out of training data, so `source_id` gives only the BrowseComp-Plus query id. For `math` it is the generator kind and seed.
 
