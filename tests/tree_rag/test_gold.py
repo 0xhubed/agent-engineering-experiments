@@ -101,3 +101,13 @@ def test_pair_id_requires_form(tmp_path):
     p.write_text(json.dumps(record) + "\n")
     with pytest.raises(GoldError):
         load_questions(p, seed=17)
+
+
+def test_several_gold_files_load_together_with_unique_qids(tmp_path):
+    a = tmp_path / "a"; a.mkdir()
+    b = tmp_path / "b"; b.mkdir()
+    pa = _write(a, [_base()])
+    pb = _write(b, [_base() | {"qid": "other"}])
+    assert [q.qid for q in load_questions([pa, pb], seed=1)] == [_base()["qid"], "other"]
+    with pytest.raises(GoldError, match="duplicate qid"):
+        load_questions([pa, pa], seed=1)
