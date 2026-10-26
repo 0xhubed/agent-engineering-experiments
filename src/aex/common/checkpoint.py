@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import time
 from pathlib import Path
 
 
@@ -17,8 +18,16 @@ def row_key(qid: str, arm: str, navigator: str, answerer: str) -> str:
 class Checkpoint:
     def __init__(self, path: str | Path) -> None:
         Path(path).parent.mkdir(parents=True, exist_ok=True)
-        self._db = sqlite3.connect(str(path))
-        self._db.execute("PRAGMA journal_mode=WAL")
+        self._db = sqlite3.connect(str(path), timeout=60)   # several run processes may share one file
+        # Switching a fresh file to WAL can fail with "locked" despite the busy timeout when shards open it at once.
+        for attempt in range(30):
+            try:
+                self._db.execute("PRAGMA journal_mode=WAL")
+                break
+            except sqlite3.OperationalError as exc:
+                if "locked" not in str(exc) or attempt == 29:
+                    raise
+                time.sleep(1)
         self._db.execute(
             "CREATE TABLE IF NOT EXISTS rows ("
             " seq INTEGER PRIMARY KEY AUTOINCREMENT,"

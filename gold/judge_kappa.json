@@ -1,0 +1,15 @@
+{
+ "grader": "claude-opus-5.5",
+ "n": 120,
+ "kappa": 0.895,
+ "agreement": 0.975,
+ "grader_correct": 105,
+ "judge_correct": 102,
+ "threshold": 0.7,
+ "passes": true,
+ "disagreements": [
+  "financebench-01198-raptor-qwen3-8-27b-qwen3-8-27b",
+  "financebench-01226-chunk-embed-none-qwen3-8-27b",
+  "cross-doc-rbi-at0000a3qfe1-rbi-ssp-2025rd-1-isin-hybrid-rerank-none-qwen3-8-27b"
+ ]
+}
