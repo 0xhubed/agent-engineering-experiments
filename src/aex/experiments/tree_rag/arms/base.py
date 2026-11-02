@@ -35,6 +35,12 @@ class Store:
         wanted = {self.groups.get(d) for d in q.doc_ids}
         return sorted(d for d in self.docs if self.groups.get(d) in wanted)
 
+    def reachable(self, questions: Iterable[Question], scopes: dict[str, str]) -> Store:
+        """The documents some question can search, and nothing else: arms index only what a run can use
+        (a dev run then skips the FinanceBench filings only test questions ask about)."""
+        keep = {d for q in questions for d in self.scope(q, scopes.get(q.dataset, "corpus"))}
+        return Store((self.docs[d] for d in sorted(keep)), groups=self.groups)
+
     def get(self, doc_id: str) -> ParsedDoc:
         if doc_id not in self.docs:
             raise KeyError(f"document {doc_id!r} is not in the store")

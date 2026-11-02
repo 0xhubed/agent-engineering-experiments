@@ -23,7 +23,7 @@ docker run -d --name "$NAME" --restart unless-stopped --gpus all --ipc host \
   --reasoning-parser=qwen3 \
   --enable-auto-tool-choice --tool-call-parser=qwen3_coder \
   '--speculative-config={"method":"mtp","num_speculative_tokens":2}' \
-  --max-num-seqs=4 \
+  --max-num-seqs=16 \
   --gpu-memory-utilization=0.62 \
   --max-model-len=262144
 # 0.62 of 121 GiB: 22 GiB weights + ~50 GiB KV (4 x 262k-token contexts need ~36 GiB); the default 0.92

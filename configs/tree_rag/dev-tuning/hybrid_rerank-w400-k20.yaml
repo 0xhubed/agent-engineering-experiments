@@ -1,0 +1,54 @@
+# Dev tuning (plan 1c Task 2, prereg §5.1): hybrid_rerank, 400-word chunks, k 20 of 60 reranked (8,000 words).
+# Everything else as configs/tree_rag/dev-baseline.yaml, the arm's default point.
+seed: 17
+gold: [gold/termsheets.jsonl, gold/prospectuses.jsonl, gold/financebench.jsonl]
+parsed_dir: data/parsed
+checkpoint: runs/dev-tuning/hybrid_rerank-w400-k20.sqlite
+splits: [dev]
+scope: {financebench: question_docs}
+arms: [hybrid_rerank]
+navigators: [qwen3.8-27b]
+answerers: [qwen3.8-27b]
+judge: qwen3.8-27b-judge
+indexer: qwen3.8-27b-indexer   # RAPTOR summaries + PageIndex tree building, thinking off
+max_answer_tokens: 8192
+models:
+  qwen3.8-27b:
+    kind: openai
+    base_url: http://hubed-dgx:8000/v1
+    model: qwen3.8-27b
+    revision: unsloth/Qwen3.8-27B-NVFP4@7d6f8d4d72f56b92b3cdbf22f156b90e1bab0108
+    local: true
+    extra_body: {chat_template_kwargs: {reasoning_effort: medium}}
+    timeout_s: 1800   # requests may queue behind other arms (max-num-seqs 16)
+  qwen3.8-27b-judge:
+    kind: openai
+    base_url: http://hubed-dgx:8000/v1
+    model: qwen3.8-27b
+    revision: unsloth/Qwen3.8-27B-NVFP4@7d6f8d4d72f56b92b3cdbf22f156b90e1bab0108
+    local: true
+    extra_body: {chat_template_kwargs: {enable_thinking: false}}
+    timeout_s: 900
+  qwen3.8-27b-indexer:
+    kind: openai
+    base_url: http://hubed-dgx:8000/v1
+    model: qwen3.8-27b
+    revision: unsloth/Qwen3.8-27B-NVFP4@7d6f8d4d72f56b92b3cdbf22f156b90e1bab0108
+    local: true
+    extra_body: {chat_template_kwargs: {enable_thinking: false}}
+    timeout_s: 900
+services:
+  embedder:
+    kind: openai_embed
+    base_url: http://hubed-dgx:8001/v1
+    model: qwen3-embedding-4b
+    query_prefix: "Instruct: Given a question about a financial product, retrieve the document passage that answers it\nQuery:"
+  reranker:
+    kind: openai_rerank
+    base_url: http://hubed-dgx:8002/v1
+    model: qwen3-reranker-4b
+    query_template: "<|im_start|>system\nJudge whether the Document meets the requirements based on the Query and the Instruct provided. Note that the answer can only be \"yes\" or \"no\".<|im_end|>\n<|im_start|>user\n<Instruct>: Given a question about a financial product, judge whether the document passage contains the answer\n<Query>: {query}\n"
+    document_template: "<Document>: {document}<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n"
+arm_options:
+  hybrid_rerank: {cache_dir: data/cache, k: 20, max_words: 400, overlap: 80, candidates: 100, rerank_top: 60}
+prices: {}

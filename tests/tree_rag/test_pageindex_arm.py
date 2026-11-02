@@ -243,3 +243,134 @@ def test_native_arm_is_registered_for_export():
     from aex.experiments.tree_rag.export import ARM_LABELS
     assert ARMS["pageindex_native"].family == "tree"
     assert ARM_LABELS["pageindex_native"] == "PageIndex (its own answer)"
+
+
+NO_THINK = {"chat_template_kwargs": {"enable_thinking": False}}
+
+
+def _indexer_arm(pdfs, tmp_path, monkeypatch, indexer_body):
+    arm = _arm(pdfs, tmp_path, monkeypatch)
+    arm.indexer = OpenAICompatClient("http://upstream/v1", "qwen3.8-27b", extra_body=indexer_body)
+    return arm
+
+
+def test_trees_are_built_under_the_indexer_settings_and_navigation_keeps_the_navigators(pdfs, tmp_path, monkeypatch):
+    arm = _indexer_arm(pdfs, tmp_path, monkeypatch, NO_THINK)
+    seen = []
+    monkeypatch.setattr(FakeClient, "submit_document", lambda self, path, metadata=None: (
+        seen.append(dict(arm._proxy.defaults)), {"doc_id": f"pi-{metadata['aex_doc_id']}"})[1])
+    arm.index(_store())
+    assert [d["chat_template_kwargs"] for d in seen] == [{"enable_thinking": False}] * 2
+    assert arm._proxy.defaults["chat_template_kwargs"] == {"reasoning_effort": "medium"}
+
+
+def test_a_different_indexer_rebuilds_the_trees(pdfs, tmp_path, monkeypatch):
+    _indexer_arm(pdfs, tmp_path, monkeypatch, NO_THINK).index(_store())
+    _indexer_arm(pdfs, tmp_path, monkeypatch, NO_THINK).index(_store())
+    assert FakeClient.instances[-1].submitted == []
+    _arm(pdfs, tmp_path, monkeypatch).index(_store())          # back to the navigator's settings
+    assert len(FakeClient.instances[-1].submitted) == 2
+
+
+def test_the_indexer_must_be_the_navigators_served_model(pdfs, tmp_path, monkeypatch):
+    arm = _arm(pdfs, tmp_path, monkeypatch)
+    arm.indexer = OpenAICompatClient("http://elsewhere/v1", "other-model")
+    with pytest.raises(ValueError, match="served model"):
+        arm.index(_store())
+
+
+def _failing_d1(monkeypatch, calls=None):
+    def submit(self, path, metadata=None):
+        if calls is not None:
+            calls.append(metadata["aex_doc_id"])
+        if metadata["aex_doc_id"] == "d1":
+            raise RuntimeError("node dropped")
+        self.submitted.append((path, metadata))
+        return {"doc_id": f"pi-{metadata['aex_doc_id']}"}
+
+    monkeypatch.setattr(FakeClient, "submit_document", submit)
+
+
+def test_a_failed_tree_is_recorded_and_the_others_still_build(pdfs, tmp_path, monkeypatch, capsys):
+    arm = _arm(pdfs, tmp_path, monkeypatch)
+    _failing_d1(monkeypatch)
+    arm.index(_store())
+    assert [m["aex_doc_id"] for _, m in FakeClient.instances[-1].submitted] == ["d2"]
+    assert arm.failed == {"d1": "RuntimeError: node dropped"}
+    assert "1 tree(s) failed to build: d1: RuntimeError: node dropped" in capsys.readouterr().err
+
+
+def test_a_failed_build_is_retried_before_the_tree_counts_as_failed(pdfs, tmp_path, monkeypatch):
+    calls = []
+    arm = _arm(pdfs, tmp_path, monkeypatch)
+    _failing_d1(monkeypatch, calls)
+    arm.index(_store())
+    assert calls == ["d1"] * pia.ATTEMPTS + ["d2"]
+
+
+def test_a_flaky_build_succeeds_on_a_later_attempt(pdfs, tmp_path, monkeypatch):
+    arm = _arm(pdfs, tmp_path, monkeypatch)
+    tries = []
+
+    def submit(self, path, metadata=None):
+        tries.append(metadata["aex_doc_id"])
+        if tries.count("d1") == 1 and metadata["aex_doc_id"] == "d1":
+            raise RuntimeError("node dropped")
+        return {"doc_id": f"pi-{metadata['aex_doc_id']}"}
+
+    monkeypatch.setattr(FakeClient, "submit_document", submit)
+    arm.index(_store())
+    assert tries == ["d1", "d1", "d2"] and arm.failed == {} and set(arm._ids) == {"d1", "d2"}
+
+
+def test_a_question_whose_only_tree_failed_is_scored_wrong_without_an_answer(pdfs, tmp_path, monkeypatch):
+    from aex.common.checkpoint import Checkpoint
+    from aex.common.llm import MockClient
+    from aex.experiments.tree_rag.run import RunConfig, run_experiment
+    FakeClient.instances = []
+    monkeypatch.setattr(pia, "_client_factory", lambda **config: FakeClient(**config))
+    _failing_d1(monkeypatch)
+    answered = []
+    clients = {"nav": OpenAICompatClient("http://upstream/v1", "nav"),
+               "ans": MockClient(lambda m: answered.append(m) or "ANSWER: 4", model="ans"),
+               "judge": MockClient(lambda m: "CORRECT", model="judge")}
+    cfg = RunConfig(seed=17, gold="", parsed_dir="", checkpoint="", arms=["pageindex"], navigators=["nav"],
+                    answerers=["ans"], judge="judge", models={}, splits=("test",), scope={"ts": "question_docs"},
+                    arm_options={"pageindex": {"pdf_dir": str(pdfs), "storage_dir": str(tmp_path / "pi")}})
+    cp = Checkpoint(tmp_path / "cp.sqlite")
+    run_experiment(cfg, clients=clients, store=_store(), questions=[_q()], checkpoint=cp)
+    rows = {r["arm"]: r for r in cp.rows()}
+    assert set(rows) == {"pageindex", "pageindex_native"} and not answered
+    assert all(r["correct"] is False and r["failure"] == "index_failed" for r in rows.values())
+    assert rows["pageindex"]["detail"]["trace"]["index_failed"] == ["d1"]
+
+
+def _turns(monkeypatch, fail_times):
+    calls = []
+    original = FakeClient.chat
+
+    def chat(self, question, doc_id=None, extra_body=None):
+        calls.append(question)
+        if len(calls) <= fail_times:
+            raise RuntimeError("The agent did not finish within max_turns (the default limit).")
+        return original(self, question, doc_id=doc_id, extra_body=extra_body)
+
+    monkeypatch.setattr(FakeClient, "chat", chat)
+    return calls
+
+
+def test_an_agent_out_of_turns_is_retried_then_answers(pdfs, tmp_path, monkeypatch):
+    arm = _arm(pdfs, tmp_path, monkeypatch)
+    arm.index(_store())
+    calls = _turns(monkeypatch, 1)
+    r = arm.retrieve(_q(), _store())
+    assert len(calls) == 2 and r.failure is None and r.evidence and len(r.trace["max_turns"]) == 1
+
+
+def test_an_agent_out_of_turns_every_time_is_a_scored_failure(pdfs, tmp_path, monkeypatch):
+    arm = _arm(pdfs, tmp_path, monkeypatch)
+    arm.index(_store())
+    calls = _turns(monkeypatch, 99)
+    r = arm.retrieve(_q(), _store())
+    assert len(calls) == pia.ATTEMPTS and r.failure == "max_turns" and r.evidence == []
+    assert "native_answer" in r.trace          # the runner writes a pageindex_native row too

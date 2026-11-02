@@ -9,6 +9,7 @@ MeteringProxy so tokens, latency and sequential calls land in the question's Led
 from __future__ import annotations
 
 import json
+import sys
 import threading
 import time
 from pathlib import Path
@@ -20,6 +21,7 @@ from aex.experiments.tree_rag.arms.base import IndexStats, Store, register
 from aex.experiments.tree_rag.parse import file_sha256
 from aex.experiments.tree_rag.types import EvidencePage, Question, Retrieval
 
+ATTEMPTS = 3
 _lock = threading.Lock()
 _active: list[tuple[float, str, list[int]]] | None = None
 
@@ -78,13 +80,15 @@ class PageIndexArm:
 
     def __init__(self, *, navigator: ChatClient | None = None, pdf_dir: str | None = None,
                  storage_dir: str = "data/pageindex", scopes: dict | None = None, seed: int = 0,
-                 **options) -> None:
+                 indexer: ChatClient | None = None, **options) -> None:
         self.navigator, self.scopes, self.seed = navigator, scopes or {}, seed
+        self.indexer = indexer or navigator   # its settings apply while trees are built
         self.pdf_dir = Path(pdf_dir) if pdf_dir else None
         self.storage_dir = Path(storage_dir)
         self._client = None
         self._proxy: MeteringProxy | None = None
         self._ids: dict[str, str] = {}
+        self.failed: dict[str, str] = {}   # doc_id -> why its tree could not be built
         self._shown: list[tuple[str, str]] | None = None   # (what, pageindex id) the agent was shown, in order
 
     # ── setup ──
@@ -99,9 +103,12 @@ class PageIndexArm:
         _install_capture()
         # The SDK sends no temperature or seed, and no thinking setting on its indexing calls: the proxy
         # supplies ours wherever it leaves them out, so PageIndex runs under the same settings as every arm.
-        defaults = {"temperature": 0.0, "seed": self.seed, **(getattr(self.navigator, "extra_body", None) or {})}
+        if self.indexer is not self.navigator and (self.indexer.base_url, self.indexer.model) != (
+                self.navigator.base_url, self.navigator.model):
+            raise ValueError("arm 'pageindex': the indexer must be the navigator's served model (other settings only)")
         self._proxy = MeteringProxy(self.navigator.base_url, model=self.navigator.model, local=self.navigator.local,
-                                    defaults=defaults)
+                                    defaults=self._defaults(self.navigator),
+                                    timeout_s=getattr(self.navigator, "timeout_s", 600.0))
         self._proxy.start()
         self.storage_dir.mkdir(parents=True, exist_ok=True)
         self._client = _client_factory(model=self.navigator.model, storage_path=str(self.storage_dir),
@@ -120,24 +127,63 @@ class PageIndexArm:
 
         setattr(self._client, method, watched)
 
+    def _defaults(self, client: ChatClient) -> dict:
+        return {"temperature": 0.0, "seed": self.seed, **(getattr(client, "extra_body", None) or {})}
+
     @property
     def _map_file(self) -> Path:
         return self.storage_dir / "aex-index.json"
 
+    @property
+    def _failed_file(self) -> Path:
+        return self.storage_dir / "aex-failed.json"
+
     def index(self, store: Store) -> IndexStats:
         self._ensure_client()
         known = json.loads(self._map_file.read_text()) if self._map_file.exists() else {}
+        failed = json.loads(self._failed_file.read_text()) if self._failed_file.exists() else {}
         total = IndexStats()
+        indexer = json.dumps(self._defaults(self.indexer), sort_keys=True)
+        try:
+            self._proxy.defaults = self._defaults(self.indexer)
+            self._build_trees(store, known, failed, indexer, total)
+        finally:
+            self._proxy.defaults = self._defaults(self.navigator)
+        self._ids = {d: v["pageindex_id"] for d, v in known.items()}
+        self.failed = {d: v["error"] for d, v in failed.items() if d in store.docs and d not in self._ids}
+        if self.failed:
+            # PageIndex runs its released defaults only (pre-registration §5): a tree that does not build is
+            # not retried with other settings. Questions that need it are scored incorrect (`index_failed`).
+            print(f"pageindex: {len(self.failed)} tree(s) failed to build: "
+                  + "; ".join(f"{d}: {e}" for d, e in sorted(self.failed.items())), file=sys.stderr, flush=True)
+        return total
+
+    def _build_trees(self, store: Store, known: dict, failed: dict, indexer: str, total: IndexStats) -> None:
         for doc_id in sorted(store.docs):
             pdf = self.pdf_dir / f"{doc_id}.pdf"
             if not pdf.exists():
                 raise FileNotFoundError(f"pageindex: no PDF for document {doc_id!r} at {pdf}")
             sha = file_sha256(pdf)
-            if known.get(doc_id, {}).get("sha256") != sha:
-                ledger = Ledger()
-                with self._proxy.recording(ledger):
-                    submitted = self._client.submit_document(str(pdf), metadata={"aex_doc_id": doc_id, "sha256": sha})
-                known[doc_id] = {"sha256": sha, "pageindex_id": submitted["doc_id"],
+            # Trees built before the indexer setting existed carry none; they were built with the navigator.
+            built_with = known.get(doc_id, {}).get("indexer", json.dumps(self._defaults(self.navigator), sort_keys=True))
+            if known.get(doc_id, {}).get("sha256") != sha or built_with != indexer:
+                # The same settings can fail and then succeed (fb-johnson-johnson-2022-10k failed twice, then
+                # built): each build gets ATTEMPTS tries before the document counts as failed.
+                errors = []
+                for _ in range(ATTEMPTS):
+                    ledger = Ledger()
+                    try:
+                        with self._proxy.recording(ledger):
+                            submitted = self._client.submit_document(str(pdf), metadata={"aex_doc_id": doc_id, "sha256": sha})
+                        break
+                    except Exception as exc:   # the SDK's own error types; every other tree is still built
+                        errors.append(f"{type(exc).__name__}: {exc}")
+                else:
+                    failed[doc_id] = {"sha256": sha, "indexer": indexer, "error": errors[-1], "attempts": len(errors)}
+                    self._failed_file.write_text(json.dumps(failed, indent=1, sort_keys=True))
+                    continue
+                failed.pop(doc_id, None)
+                known[doc_id] = {"sha256": sha, "pageindex_id": submitted["doc_id"], "indexer": indexer,
                                  "cost": {"input_tokens": ledger.input_tokens, "output_tokens": ledger.output_tokens,
                                           "gpu_s": ledger.gpu_s}}
                 self._map_file.write_text(json.dumps(known, indent=1, sort_keys=True))
@@ -147,8 +193,8 @@ class PageIndexArm:
             total.output_tokens += cost.get("output_tokens", 0)
             if cost.get("gpu_s") is not None:
                 total.gpu_s = (total.gpu_s or 0.0) + cost["gpu_s"]
-        self._ids = {d: v["pageindex_id"] for d, v in known.items()}
-        return total
+        self._failed_file.parent.mkdir(parents=True, exist_ok=True)
+        self._failed_file.write_text(json.dumps(failed, indent=1, sort_keys=True))
 
     # ── query ──
 
@@ -160,6 +206,11 @@ class PageIndexArm:
         """Run the SDK's agent over `doc_ids` (ours) and turn what it read or was shown into evidence."""
         global _active
         scope = [self._ids[d] for d in doc_ids if d in self._ids]
+        missing = [d for d in doc_ids if d in self.failed]
+        if not scope and missing:
+            trace = {"index_failed": missing, "reads": [], "pages": [], "doc_id": None, "visited": [],
+                     "backtracks": [], "selected": None, "native_answer": None}
+            return Retrieval([], trace, ledger, failure="index_failed")
         target = scope[0] if len(scope) == 1 else scope
         extra = getattr(self.navigator, "extra_body", None) or None
         reads: list[tuple[float, str, list[int]]] = []
@@ -167,16 +218,34 @@ class PageIndexArm:
         self._shown = []
         with _lock:
             _active = reads
+        gave_up = []
         try:
-            with self._proxy.recording(ledger):
-                sdk_answer = self._client.chat(q.question, doc_id=target, extra_body=extra)
-        except Exception as exc:  # the SDK raises its own error types; the runner retries LLMError rows
-            raise LLMError(f"pageindex: {type(exc).__name__}: {exc}") from exc
+            # The agent can run out of its default turn budget; the same settings can then finish (as a tree
+            # build can), so it gets ATTEMPTS tries. After that the method failed: scored, not retried.
+            for _ in range(ATTEMPTS):
+                reads.clear()
+                self._shown = []
+                try:
+                    with self._proxy.recording(ledger):
+                        sdk_answer = self._client.chat(q.question, doc_id=target, extra_body=extra)
+                    break
+                except Exception as exc:  # the SDK raises its own error types; the runner retries LLMError rows
+                    if "max_turns" not in str(exc):
+                        raise LLMError(f"pageindex: {type(exc).__name__}: {exc}") from exc
+                    gave_up.append(f"{type(exc).__name__}: {exc}")
         finally:
             with _lock:
                 _active = None
             shown, self._shown = self._shown, None
+        if len(gave_up) == ATTEMPTS:
+            trace = {"max_turns": gave_up, "reads": [], "pages": [], "doc_id": None, "visited": [],
+                     "backtracks": [], "selected": None, "native_answer": None}
+            return Retrieval([], trace, ledger, failure="max_turns")
         evidence, trace = self._evidence_and_trace(reads, store, started, str(sdk_answer))
+        if missing:
+            trace["index_failed"] = missing   # the agent searched the other documents in scope
+        if gave_up:
+            trace["max_turns"] = gave_up      # earlier attempts that ran out of turns
         if evidence:
             trace["answered_from"] = "pages"
         else:

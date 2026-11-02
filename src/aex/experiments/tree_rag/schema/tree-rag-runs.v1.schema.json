@@ -40,7 +40,7 @@
         "cost_usd": {"type": ["number", "null"], "minimum": 0},
         "gpu_s": {"type": ["number", "null"], "minimum": 0},
         "failure": {"enum": [null, "answered_unanswerable", "wrong_doc", "parse_failure", "wrong_page",
-                             "right_evidence_wrong_answer", "not_applicable", "error"]}
+                             "right_evidence_wrong_answer", "max_turns", "not_applicable", "error"]}
       }}}
   }
 }

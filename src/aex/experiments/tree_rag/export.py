@@ -41,11 +41,14 @@ def _snippet(text: str, limit: int) -> str:
     return re.sub(r"\s+", " ", text).strip()[:limit]
 
 
-def _evidence_item(e, store: Store, limit: int) -> dict:
+def _evidence_item(e, store: Store, limit: int, with_snippet: bool = True) -> dict:
+    """An evidence reference; the quote only when `with_snippet` (the top few per result, to keep shards small)."""
     if isinstance(e, list):   # phase-0 rows: [doc_id, page]
         doc_id, page = e
-        return {"doc_id": doc_id, "page": page, "kind": "page", "snippet": _snippet(store.get(doc_id).page(page).text, limit)}
-    return {"doc_id": e["doc_id"], "page": e["page"], "kind": e.get("kind", "page"), "snippet": _snippet(e["snippet"], limit)}
+        item = {"doc_id": doc_id, "page": page, "kind": "page"}
+        return item | {"snippet": _snippet(store.get(doc_id).page(page).text, limit)} if with_snippet else item
+    item = {"doc_id": e["doc_id"], "page": e["page"], "kind": e.get("kind", "page")}
+    return item | {"snippet": _snippet(e["snippet"], limit)} if with_snippet else item
 
 
 def _is_local(spec: dict) -> bool:
@@ -71,12 +74,12 @@ def _redact(entry: dict) -> dict:
               "gold": {"kind": entry["gold"]["kind"], "value": None}, "redacted": True}
     for r in entry["results"]:
         r["answer"] = None
-        r["evidence"] = [{**e, "snippet": ""} for e in r["evidence"]]
+        r["evidence"] = [{**e, "snippet": ""} if "snippet" in e else e for e in r["evidence"]]
         r["trace"] = {k: v for k, v in r["trace"].items() if k not in _TRACE_TEXT_KEYS}
     return entry
 
 
-def _shard_entries(rows, questions, store, snippet_chars, redact_datasets=frozenset()):
+def _shard_entries(rows, questions, store, snippet_chars, redact_datasets=frozenset(), snippet_top=5):
     by_qid: dict[str, list[dict]] = defaultdict(list)
     for r in rows:
         by_qid[r["qid"]].append(r)
@@ -86,7 +89,8 @@ def _shard_entries(rows, questions, store, snippet_chars, redact_datasets=frozen
         results = []
         for r in by_qid[q.qid]:
             detail = r.get("detail", {})
-            evidence = [_evidence_item(e, store, snippet_chars) for e in detail.get("evidence", [])]
+            evidence = [_evidence_item(e, store, snippet_chars, with_snippet=i < snippet_top)
+                        for i, e in enumerate(detail.get("evidence", []))]
             results.append({"arm": r["arm"], "navigator": r["navigator"], "answerer": r["answerer"],
                             "answer": detail.get("answer"), "correct": r["correct"], "failure": r["failure"],
                             "latency_s": r["latency_s"], "tokens_query": r["tokens_query"],
@@ -94,8 +98,7 @@ def _shard_entries(rows, questions, store, snippet_chars, redact_datasets=frozen
         entries.append({"qid": q.qid, "dataset": q.dataset, "regime": q.regime, "qtype": q.qtype,
                         "question": q.question, "gold": {"kind": q.gold.kind, "value": q.gold.value},
                         "gold_pages": [[d, p] for d, p in q.evidence],
-                        "docs": [{"doc_id": d.doc_id, "title": d.title, "n_pages": d.n_pages,
-                                  "tree": [asdict(n) for n in d.tree]} for d in docs],
+                        "docs": [{"doc_id": d.doc_id, "title": d.title, "n_pages": d.n_pages} for d in docs],
                         "results": results})
         if q.dataset in redact_datasets:
             _redact(entries[-1])
@@ -104,10 +107,13 @@ def _shard_entries(rows, questions, store, snippet_chars, redact_datasets=frozen
 
 def export(rows: list[dict], *, questions: list[Question], store: Store, models: dict[str, dict],
            judge: str | None, manifest_hash: str, data_version: str, out_dir: str | Path, shard_size: int = 50,
-           snippet_chars: int = 300, allow_errors: bool = False,
+           snippet_chars: int = 300, snippet_top: int = 5, allow_errors: bool = False,
            redact_datasets: frozenset[str] | set[str] = frozenset({"financebench"})) -> Path:
     """`redact_datasets`: datasets whose text may not appear in the public explorer. FinanceBench is
-    redacted until Daniel signs off on showing it (decision D3); aggregates are unaffected."""
+    redacted until Daniel signs off on showing it (decision D3); aggregates are unaffected.
+
+    Explorer shards carry a quote for each result's first `snippet_top` evidence items only (the rest are page
+    references), and each document's tree is written once, to `explorer/trees/<doc_id>.json`, not per question."""
     errors = [r for r in rows if r.get("failure") == "error"]
     if errors and not allow_errors:
         raise ExportError(f"{len(errors)} rows have failure='error'; rerun them or pass allow_errors")
@@ -131,14 +137,19 @@ def export(rows: list[dict], *, questions: list[Question], store: Store, models:
     explorer_dir = out_dir / "explorer"
     explorer_dir.mkdir(exist_ok=True)
     by_dataset: dict[str, list[dict]] = defaultdict(list)
-    for entry in _shard_entries(rows, questions, store, snippet_chars, frozenset(redact_datasets)):
+    for entry in _shard_entries(rows, questions, store, snippet_chars, frozenset(redact_datasets), snippet_top):
         by_dataset[entry["dataset"]].append(entry)
+    trees_dir = explorer_dir / "trees"
+    trees_dir.mkdir(exist_ok=True)
+    for doc_id in sorted({d["doc_id"] for entries in by_dataset.values() for e in entries for d in e["docs"]}):
+        (trees_dir / f"{doc_id}.json").write_text(json.dumps(
+            {"schema": "tree-rag-tree/v1", "doc_id": doc_id, "tree": [asdict(n) for n in store.get(doc_id).tree]}))
     shards = []
     for dataset, entries in sorted(by_dataset.items()):
         for i in range(0, len(entries), shard_size):
             chunk = entries[i:i + shard_size]
             name = f"{dataset}-{i // shard_size}.json"
-            (explorer_dir / name).write_text(json.dumps({"schema": "tree-rag-explorer/v1", "questions": chunk}))
+            (explorer_dir / name).write_text(json.dumps({"schema": "tree-rag-explorer/v2", "questions": chunk}))
             shards.append({"file": name, "dataset": dataset, "qids": [e["qid"] for e in chunk]})
     (explorer_dir / "index.json").write_text(
         json.dumps({"schema": "tree-rag-explorer-index/v1", "shards": shards}, indent=1))
