@@ -1,0 +1,562 @@
+{
+  "matrix": "phase2",
+  "runs": 360,
+  "expected": 360,
+  "solve": {
+    "bcp": {
+      "fork": {
+        "runs": 60,
+        "first": 20,
+        "solved": 20
+      },
+      "fork-silent": {
+        "runs": 60,
+        "first": 20,
+        "solved": 20
+      },
+      "isolated": {
+        "runs": 60,
+        "first": 32,
+        "solved": 33
+      }
+    },
+    "math": {
+      "fork": {
+        "runs": 60,
+        "first": 23,
+        "solved": 23
+      },
+      "fork-silent": {
+        "runs": 60,
+        "first": 21,
+        "solved": 21
+      },
+      "isolated": {
+        "runs": 60,
+        "first": 23,
+        "solved": 25
+      }
+    }
+  },
+  "describe": {
+    "bcp": {
+      "fork": {
+        "runs": 60,
+        "messages_per_agent": 0.0,
+        "runs_with_substantive_message": 0,
+        "agents_with_substantive_message": 0,
+        "agents": 240,
+        "median_ms_to_first_substantive": null,
+        "median_idle_ms_per_agent": 136456,
+        "duplicate_reads": [
+          43,
+          233
+        ],
+        "duplicate_python": [
+          0,
+          0
+        ],
+        "wrong_consensus": 0,
+        "claims_per_run": 0.3333333333333333,
+        "false_claims": [
+          0,
+          20
+        ],
+        "end_reasons": {
+          "budget": 40,
+          "solved": 20
+        },
+        "median_tokens": 298620.0,
+        "median_wall_s": 355.0515
+      },
+      "fork-silent": {
+        "runs": 60,
+        "messages_per_agent": 0.0,
+        "runs_with_substantive_message": 0,
+        "agents_with_substantive_message": 0,
+        "agents": 240,
+        "median_ms_to_first_substantive": null,
+        "median_idle_ms_per_agent": 58001,
+        "duplicate_reads": [
+          48,
+          235
+        ],
+        "duplicate_python": [
+          0,
+          0
+        ],
+        "wrong_consensus": 0,
+        "claims_per_run": 0.35,
+        "false_claims": [
+          1,
+          21
+        ],
+        "end_reasons": {
+          "budget": 37,
+          "solved": 20,
+          "wrong_claim": 1,
+          "killed": 2
+        },
+        "median_tokens": 299204.5,
+        "median_wall_s": 369.596
+      },
+      "isolated": {
+        "runs": 60,
+        "messages_per_agent": 0.0,
+        "runs_with_substantive_message": 0,
+        "agents_with_substantive_message": 0,
+        "agents": 240,
+        "median_ms_to_first_substantive": null,
+        "median_idle_ms_per_agent": 204829,
+        "duplicate_reads": [
+          104,
+          266
+        ],
+        "duplicate_python": [
+          0,
+          0
+        ],
+        "wrong_consensus": 0,
+        "claims_per_run": 0.5666666666666667,
+        "false_claims": [
+          1,
+          34
+        ],
+        "end_reasons": {
+          "solved": 33,
+          "budget": 26,
+          "all_idle": 1
+        },
+        "median_tokens": 243426.5,
+        "median_wall_s": 304.443
+      }
+    },
+    "math": {
+      "fork": {
+        "runs": 60,
+        "messages_per_agent": 0.009523809523809525,
+        "runs_with_substantive_message": 0,
+        "agents_with_substantive_message": 0,
+        "agents": 210,
+        "median_ms_to_first_substantive": null,
+        "median_idle_ms_per_agent": 22505.0,
+        "duplicate_reads": [
+          0,
+          0
+        ],
+        "duplicate_python": [
+          0,
+          360
+        ],
+        "wrong_consensus": 0,
+        "claims_per_run": 0.4,
+        "false_claims": [
+          1,
+          24
+        ],
+        "end_reasons": {
+          "budget": 19,
+          "killed": 17,
+          "solved": 23,
+          "wrong_claim": 1
+        },
+        "median_tokens": 72824.5,
+        "median_wall_s": 1148.191
+      },
+      "fork-silent": {
+        "runs": 60,
+        "messages_per_agent": 0.0,
+        "runs_with_substantive_message": 0,
+        "agents_with_substantive_message": 0,
+        "agents": 210,
+        "median_ms_to_first_substantive": null,
+        "median_idle_ms_per_agent": 0,
+        "duplicate_reads": [
+          0,
+          0
+        ],
+        "duplicate_python": [
+          0,
+          355
+        ],
+        "wrong_consensus": 0,
+        "claims_per_run": 0.36666666666666664,
+        "false_claims": [
+          1,
+          22
+        ],
+        "end_reasons": {
+          "budget": 20,
+          "killed": 18,
+          "solved": 21,
+          "wrong_claim": 1
+        },
+        "median_tokens": 64726.5,
+        "median_wall_s": 1212.312
+      },
+      "isolated": {
+        "runs": 60,
+        "messages_per_agent": 0.0,
+        "runs_with_substantive_message": 0,
+        "agents_with_substantive_message": 0,
+        "agents": 240,
+        "median_ms_to_first_substantive": null,
+        "median_idle_ms_per_agent": 70475.5,
+        "duplicate_reads": [
+          0,
+          0
+        ],
+        "duplicate_python": [
+          0,
+          457
+        ],
+        "wrong_consensus": 0,
+        "claims_per_run": 0.45,
+        "false_claims": [
+          2,
+          27
+        ],
+        "end_reasons": {
+          "all_idle": 5,
+          "budget": 24,
+          "solved": 25,
+          "killed": 6
+        },
+        "median_tokens": 121210.0,
+        "median_wall_s": 1528.002
+      }
+    }
+  },
+  "mechanism": {
+    "bcp": {
+      "fork": {
+        "runs": 60,
+        "duplicate_reads": {
+          "dup": 43,
+          "total": 233,
+          "share": 0.18454935622317598,
+          "lo": 0.13692946058091288,
+          "hi": 0.23529411764705882,
+          "vs_isolated": {
+            "diff": -0.20642808738584656,
+            "lo": -0.3114395183360701,
+            "hi": -0.10328460224036454
+          }
+        },
+        "duplicate_python": {
+          "dup": 0,
+          "total": 0,
+          "share": null,
+          "lo": null,
+          "hi": null,
+          "vs_isolated": {
+            "diff": null,
+            "lo": null,
+            "hi": null
+          }
+        },
+        "post_fork_duplicate_reads": {
+          "dup": 43,
+          "total": 150,
+          "share": 0.2866666666666667,
+          "lo": 0.21686746987951808,
+          "hi": 0.3581081081081081
+        },
+        "post_fork_duplicate_python": {
+          "dup": 0,
+          "total": 0,
+          "share": null,
+          "lo": null,
+          "hi": null
+        },
+        "forked": [
+          60,
+          60
+        ],
+        "ended_before_fork": [
+          0,
+          60
+        ],
+        "fallback": [
+          5,
+          60
+        ],
+        "distinct_directions": [
+          55,
+          60
+        ],
+        "max_direction_jaccard_median": 0.2264957264957265
+      },
+      "fork-silent": {
+        "runs": 60,
+        "duplicate_reads": {
+          "dup": 48,
+          "total": 235,
+          "share": 0.20425531914893616,
+          "lo": 0.14732142857142858,
+          "hi": 0.27,
+          "vs_isolated": {
+            "diff": -0.18672212446008637,
+            "lo": -0.2973700332574829,
+            "hi": -0.0759259259259259
+          }
+        },
+        "duplicate_python": {
+          "dup": 0,
+          "total": 0,
+          "share": null,
+          "lo": null,
+          "hi": null,
+          "vs_isolated": {
+            "diff": null,
+            "lo": null,
+            "hi": null
+          }
+        },
+        "post_fork_duplicate_reads": {
+          "dup": 48,
+          "total": 152,
+          "share": 0.3157894736842105,
+          "lo": 0.23404255319148937,
+          "hi": 0.4025974025974026
+        },
+        "post_fork_duplicate_python": {
+          "dup": 0,
+          "total": 0,
+          "share": null,
+          "lo": null,
+          "hi": null
+        },
+        "forked": [
+          60,
+          60
+        ],
+        "ended_before_fork": [
+          0,
+          60
+        ],
+        "fallback": [
+          5,
+          60
+        ],
+        "distinct_directions": [
+          55,
+          60
+        ],
+        "max_direction_jaccard_median": 0.2264957264957265
+      },
+      "isolated": {
+        "runs": 60,
+        "duplicate_reads": {
+          "dup": 104,
+          "total": 266,
+          "share": 0.39097744360902253,
+          "lo": 0.3054545454545455,
+          "hi": 0.4789272030651341
+        },
+        "duplicate_python": {
+          "dup": 0,
+          "total": 0,
+          "share": null,
+          "lo": null,
+          "hi": null
+        }
+      }
+    },
+    "math": {
+      "fork": {
+        "runs": 60,
+        "duplicate_reads": {
+          "dup": 0,
+          "total": 0,
+          "share": null,
+          "lo": null,
+          "hi": null,
+          "vs_isolated": {
+            "diff": null,
+            "lo": null,
+            "hi": null
+          }
+        },
+        "duplicate_python": {
+          "dup": 0,
+          "total": 360,
+          "share": 0.0,
+          "lo": 0.0,
+          "hi": 0.0,
+          "vs_isolated": {
+            "diff": 0.0,
+            "lo": 0.0,
+            "hi": 0.0
+          }
+        },
+        "post_fork_duplicate_reads": {
+          "dup": 0,
+          "total": 0,
+          "share": null,
+          "lo": null,
+          "hi": null
+        },
+        "post_fork_duplicate_python": {
+          "dup": 0,
+          "total": 199,
+          "share": 0.0,
+          "lo": 0.0,
+          "hi": 0.0
+        },
+        "forked": [
+          50,
+          60
+        ],
+        "ended_before_fork": [
+          10,
+          60
+        ],
+        "fallback": [
+          8,
+          60
+        ],
+        "distinct_directions": [
+          42,
+          60
+        ],
+        "max_direction_jaccard_median": 0.20811987704918034
+      },
+      "fork-silent": {
+        "runs": 60,
+        "duplicate_reads": {
+          "dup": 0,
+          "total": 0,
+          "share": null,
+          "lo": null,
+          "hi": null,
+          "vs_isolated": {
+            "diff": null,
+            "lo": null,
+            "hi": null
+          }
+        },
+        "duplicate_python": {
+          "dup": 0,
+          "total": 355,
+          "share": 0.0,
+          "lo": 0.0,
+          "hi": 0.0,
+          "vs_isolated": {
+            "diff": 0.0,
+            "lo": 0.0,
+            "hi": 0.0
+          }
+        },
+        "post_fork_duplicate_reads": {
+          "dup": 0,
+          "total": 0,
+          "share": null,
+          "lo": null,
+          "hi": null
+        },
+        "post_fork_duplicate_python": {
+          "dup": 0,
+          "total": 196,
+          "share": 0.0,
+          "lo": 0.0,
+          "hi": 0.0
+        },
+        "forked": [
+          50,
+          60
+        ],
+        "ended_before_fork": [
+          10,
+          60
+        ],
+        "fallback": [
+          6,
+          60
+        ],
+        "distinct_directions": [
+          44,
+          60
+        ],
+        "max_direction_jaccard_median": 0.21182053494391717
+      },
+      "isolated": {
+        "runs": 60,
+        "duplicate_reads": {
+          "dup": 0,
+          "total": 0,
+          "share": null,
+          "lo": null,
+          "hi": null
+        },
+        "duplicate_python": {
+          "dup": 0,
+          "total": 457,
+          "share": 0.0,
+          "lo": 0.0,
+          "hi": 0.0
+        }
+      }
+    }
+  },
+  "verdict": {
+    "F1": {
+      "verdict": "FORKING HURTS",
+      "effect": -20.0,
+      "lo": -33.333333333333336,
+      "hi": -6.666666666666667,
+      "n": 60,
+      "mcnemar_p": 0.01181793212890625,
+      "discordant": [
+        4,
+        16
+      ]
+    },
+    "F2": {
+      "verdict": "NO GAIN",
+      "effect": 1.6666666666666667,
+      "lo": -2.5,
+      "hi": 6.666666666666667,
+      "n": 120,
+      "mcnemar_p": 0.6875,
+      "discordant": [
+        4,
+        2
+      ]
+    },
+    "F3": {
+      "testable": true,
+      "effect": -20.0,
+      "lo_one_sided": -33.333333333333336,
+      "p": 0.9937,
+      "holds": false
+    },
+    "holm": {
+      "F1": 0.03545379638671875,
+      "F2": 1.0,
+      "F3": 1.0
+    },
+    "cost": {
+      "bcp": {
+        "ratio": 1.8532035776078326,
+        "lo": 1.2847676072137473,
+        "hi": 2.97737079504355,
+        "tokens_per_solved": {
+          "fork": 749365.8,
+          "fork-silent": 733972.1,
+          "isolated": 404362.375
+        }
+      },
+      "math": {
+        "ratio": 0.9859579875309749,
+        "lo": 0.6811548297945595,
+        "hi": 1.4692141463958484,
+        "tokens_per_solved": {
+          "fork": 229874.30434782608,
+          "fork-silent": 240678.33333333334,
+          "isolated": 233148.1739130435
+        }
+      }
+    }
+  }
+}
